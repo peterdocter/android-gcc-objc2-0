@@ -21,16 +21,22 @@ Boston, MA 02110-1301, USA.  */
 /* In grokdeclarator, distinguish syntactic contexts of declarators.  */
 enum decl_context
 { NORMAL,			/* Ordinary declaration */
-  FUNCDEF,			/* Function definition */
-  PARM,				/* Declaration of parm before function body */
-  CATCHPARM,			/* Declaration of catch parm */
-  FIELD,			/* Declaration inside struct or union */
-  BITFIELD,			/* Likewise but with specified width */
-  TYPENAME,			/* Typename (inside cast or sizeof)  */
-  MEMFUNCDEF			/* Member function definition */
+	FUNCDEF,			/* Function definition */
+	PARM,				/* Declaration of parm before function body */
+	CATCHPARM,			/* Declaration of catch parm */
+	FIELD,			/* Declaration inside struct or union */
+	BITFIELD,			/* Likewise but with specified width */
+	TYPENAME,			/* Typename (inside cast or sizeof)  */
+	/* APPLE LOCAL blocks 6339747 */
+	BLOCKDEF,			/* Declaratin of block literal */
+	MEMFUNCDEF			/* Member function definition */
 };
 
 /* We need this in here to get the decl_context definition.  */
 extern tree grokdeclarator (const cp_declarator *,
 			    const cp_decl_specifier_seq *,
 			    enum decl_context, int, tree*);
+/* APPLE LOCAL radar 4721858 */
+extern void emit_instantiate_pending_templates (location_t *);
+/* APPLE LOCAL blocks 6040305 (ce) */
+extern tree grokparms (cp_parameter_declarator *first_parm, tree *parms);

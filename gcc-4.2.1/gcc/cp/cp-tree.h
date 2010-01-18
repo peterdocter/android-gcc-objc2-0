@@ -1052,6 +1052,13 @@ struct lang_type_class GTY(())
   unsigned has_complex_assign_ref : 1;
   unsigned non_aggregate : 1;
 
+  /* APPLE LOCAL begin omit calls to empty destructors 5559195 */
+  unsigned has_nontrivial_destructor_body : 1;
+  unsigned destructor_nontrivial_because_of_base : 1;
+  unsigned destructor_triviality_final : 1;
+  /* APPLE LOCAL end omit calls to empty destructors 5559195 */
+	
+	
   /* When adding a flag here, consider whether or not it ought to
      apply to a template instance if it applies to the template.  If
      so, make sure to copy it in instantiate_class_template!  */
@@ -1059,7 +1066,9 @@ struct lang_type_class GTY(())
   /* There are some bits left to fill out a 32-bit word.  Keep track
      of this by updating the size of this bitfield whenever you add or
      remove a flag.  */
-  unsigned dummy : 12;
+  /* APPLE LOCAL begin omit calls to empty destructors 5559195 */
+  unsigned dummy : 10;
+  /* APPLE LOCAL end omit calls to empty destructors 5559195 */
 
   tree primary_base;
   VEC(tree_pair_s,gc) *vcall_indices;
@@ -2520,6 +2529,20 @@ extern void decl_shadowed_for_var_insert (tree, tree);
 #define TYPE_HAS_NONTRIVIAL_DESTRUCTOR(NODE) \
   (TYPE_LANG_FLAG_4 (NODE))
 
+/* APPLE LOCAL begin omit calls to empty destructors 5559195 */
+/* One if the body of the destructor of class type NODE has been shown to do
+ nothing, else zero. */
+#define CLASSTYPE_HAS_NONTRIVIAL_DESTRUCTOR_BODY(NODE) (LANG_TYPE_CLASS_CHECK (NODE)->has_nontrivial_destructor_body)
+
+/* One if destructor of this type must be called by its base classes because
+ one of its base classes' destructors must be called. */
+#define CLASSTYPE_DESTRUCTOR_NONTRIVIAL_BECAUSE_OF_BASE(NODE) (LANG_TYPE_CLASS_CHECK (NODE)->destructor_nontrivial_because_of_base)
+
+/* One if the values of CLASSTYPE_DESTRUCTOR_NONTRIVIAL_BECAUSE_OF_BASE
+ and CLASSTYPE_HAS_NONTRIVIAL_DESTRUCTOR_BODY are final. */
+#define CLASSTYPE_DESTRUCTOR_TRIVIALITY_FINAL(NODE) (LANG_TYPE_CLASS_CHECK (NODE)->destructor_triviality_final)
+/* APPLE LOCAL end omit calls to empty destructors 5559195 */
+
 /* Nonzero for class type means that copy initialization of this type can use
    a bitwise copy.  */
 #define TYPE_HAS_TRIVIAL_INIT_REF(NODE) \
@@ -3080,12 +3103,23 @@ extern void decl_shadowed_for_var_insert (tree, tree);
    while statement and the body of the while statement, respectively.  */
 #define WHILE_COND(NODE)	TREE_OPERAND (WHILE_STMT_CHECK (NODE), 0)
 #define WHILE_BODY(NODE)	TREE_OPERAND (WHILE_STMT_CHECK (NODE), 1)
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+#define WHILE_ATTRIBUTES(NODE)	TREE_OPERAND (WHILE_STMT_CHECK (NODE), 2)
 
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 /* DO_STMT accessors. These give access to the condition of the do
-   statement and the body of the do statement, respectively.  */
+ statement and the body of the do statement, respectively.  */
 #define DO_COND(NODE)		TREE_OPERAND (DO_STMT_CHECK (NODE), 0)
 #define DO_BODY(NODE)		TREE_OPERAND (DO_STMT_CHECK (NODE), 1)
-
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+#define DO_ATTRIBUTES(NODE)	TREE_OPERAND (DO_STMT_CHECK (NODE), 2)
+/* APPLE LOCAL begin C* language */
+/* Used as a flag to indicate synthesized inner do-while loop of a
+ foreach statement.  Used for generation of break/continue statement
+ of the loop. */
+#define DO_FOREACH(NODE)           TREE_OPERAND (DO_STMT_CHECK (NODE), 3)
+/* APPLE LOCAL end C* language */
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 /* FOR_STMT accessors. These give access to the init statement,
    condition, update expression, and body of the for statement,
    respectively.  */
@@ -3093,7 +3127,10 @@ extern void decl_shadowed_for_var_insert (tree, tree);
 #define FOR_COND(NODE)		TREE_OPERAND (FOR_STMT_CHECK (NODE), 1)
 #define FOR_EXPR(NODE)		TREE_OPERAND (FOR_STMT_CHECK (NODE), 2)
 #define FOR_BODY(NODE)		TREE_OPERAND (FOR_STMT_CHECK (NODE), 3)
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+#define FOR_ATTRIBUTES(NODE)	TREE_OPERAND (FOR_STMT_CHECK (NODE), 4)
 
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 #define SWITCH_STMT_COND(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 0)
 #define SWITCH_STMT_BODY(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 1)
 #define SWITCH_STMT_TYPE(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 2)
@@ -3683,13 +3720,15 @@ typedef struct cp_decl_specifier_seq {
 /* The various kinds of declarators.  */
 
 typedef enum cp_declarator_kind {
-  cdk_id,
-  cdk_function,
-  cdk_array,
-  cdk_pointer,
-  cdk_reference,
-  cdk_ptrmem,
-  cdk_error
+	cdk_id,
+	cdk_function,
+	cdk_array,
+	cdk_pointer,
+	cdk_reference,
+	cdk_ptrmem,
+	/* APPLE LOCAL blocks 6040305 (ch) */
+	cdk_block_pointer,
+	cdk_error
 } cp_declarator_kind;
 
 /* A declarator.  */
@@ -3757,6 +3796,13 @@ struct cp_declarator {
       /* For cdk_ptrmem, the class type containing the member.  */
       tree class_type;
     } pointer;
+	  /* APPLE LOCAL begin blocks 6040305 (ch) */
+	  /* For cdk_block_pointer.  */
+	  struct {
+		  /* The cv-qualifiers for the pointer.  */
+		  cp_cv_quals qualifiers;
+	  } block_pointer;
+	  /* APPLE LOCAL end blocks 6040305 (ch) */
   } u;
 };
 
@@ -3866,6 +3912,8 @@ extern tree convert_from_reference		(tree);
 extern tree force_rvalue			(tree);
 extern tree ocp_convert				(tree, tree, int, int);
 extern tree cp_convert				(tree, tree);
+/* APPLE LOCAL mainline */
+extern tree cp_convert_and_check		(tree, tree);
 extern tree convert_to_void	(tree, const char */*implicit context*/);
 extern tree convert_force			(tree, tree, int);
 extern tree build_expr_type_conversion		(int, tree, bool);
@@ -3911,6 +3959,8 @@ extern tree push_throw_library_fn		(tree, tree);
 extern tree check_tag_decl			(cp_decl_specifier_seq *);
 extern tree shadow_tag				(cp_decl_specifier_seq *);
 extern tree groktypename			(cp_decl_specifier_seq *, const cp_declarator *);
+/* APPLE LOCAL 6339747 */
+extern tree grokblockdecl			(cp_decl_specifier_seq *, const cp_declarator *);
 extern tree start_decl				(const cp_declarator *, cp_decl_specifier_seq *, int, tree, tree, tree *);
 extern void start_decl_1			(tree, bool);
 extern void cp_finish_decl			(tree, tree, bool, tree, int);
@@ -4260,14 +4310,20 @@ extern tree finish_then_clause			(tree);
 extern void begin_else_clause			(tree);
 extern void finish_else_clause			(tree);
 extern void finish_if_stmt			(tree);
-extern tree begin_while_stmt			(void);
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+extern tree begin_while_stmt			(tree);
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 extern void finish_while_stmt_cond		(tree, tree);
 extern void finish_while_stmt			(tree);
-extern tree begin_do_stmt			(void);
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+extern tree begin_do_stmt			(tree);
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ 
 extern void finish_do_body			(tree);
 extern void finish_do_stmt			(tree, tree);
 extern tree finish_return_stmt			(tree);
-extern tree begin_for_stmt			(void);
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+extern tree begin_for_stmt			(tree);
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 extern void finish_for_init_stmt		(tree);
 extern void finish_for_cond			(tree, tree);
 extern void finish_for_expr			(tree, tree);
@@ -4507,7 +4563,8 @@ extern tree lookup_anon_field			(tree, tree);
 extern bool invalid_nonstatic_memfn_p		(tree);
 extern tree convert_member_func_to_ptr		(tree, tree);
 extern tree convert_ptrmem			(tree, tree, bool, bool);
-extern int lvalue_or_else			(tree, enum lvalue_use);
+/* APPLE LOCAL non-lvalue assign */
+extern int lvalue_or_else			(tree*, enum lvalue_use);
 extern int lvalue_p				(tree);
 
 /* in typeck2.c */
@@ -4581,5 +4638,11 @@ extern void cp_genericize			(tree);
 extern void cp_cpp_error			(cpp_reader *, int,
 						 const char *, va_list *)
      ATTRIBUTE_GCC_CXXDIAG(3,0);
+/* APPLE LOCAL radar 5741070  */
+extern tree c_return_interface_record_type (tree);
 
+/* APPLE LOCAL begin blocks 6040305 (cg) */
+extern cp_declarator* make_block_pointer_declarator (tree, cp_cv_quals,
+													 cp_declarator *);
+/* APPLE LOCAL end blocks 6040305 (cg) */
 #endif /* ! GCC_CP_TREE_H */
