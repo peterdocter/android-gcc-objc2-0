@@ -114,6 +114,10 @@ int current_function_uses_only_leaf_regs;
    post-instantiation libcalls.  */
 int virtuals_instantiated;
 
+/* APPLE LOCAL begin radar 5732232 - blocks */
+struct block_sema_info *cur_block;
+/* APPLE LOCAL end radar 5732232 - blocks */
+
 /* Assign unique numbers to labels generated for profiling, debugging, etc.  */
 static GTY(()) int funcdef_no;
 

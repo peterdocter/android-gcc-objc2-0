@@ -157,6 +157,13 @@ Wconversion
 C ObjC C++ ObjC++ Var(warn_conversion)
 Warn about possibly confusing type conversions
 
+; APPLE LOCAL begin mainline
+; This is superseded in mainline by Wconversion
+Wshorten-64-to-32
+C ObjC C++ ObjC++ Var(warn_shorten_64_to_32)
+Warn if a value is implicitly converted from a 64 bit type to a 32 bit type
+; APPLE LOCAL end mainline
+
 Wctor-dtor-privacy
 C++ ObjC++ Var(warn_ctor_dtor_privacy)
 Warn when all constructors and destructors are private
@@ -169,6 +176,12 @@ Wdeprecated
 C++ ObjC++ Var(warn_deprecated) Init(1)
 Warn about deprecated compiler features
 
+; APPLE LOCAL begin -Wdiscard-qual 4086969
+Wdiscard-qual
+C ObjC Var(warn_discard_qual) Init(1)
+Warn about discarded qualifiers
+; APPLE LOCAL end -Wdiscard-qual 4086969
+
 Wdiv-by-zero
 C ObjC C++ ObjC++ Var(warn_div_by_zero) Init(1)
 Warn about compile-time integer division by zero
@@ -176,6 +189,12 @@ Warn about compile-time integer division by zero
 Weffc++
 C++ ObjC++ Var(warn_ecpp)
 Warn about violations of Effective C++ style rules
+
+; APPLE LOCAL begin mainline
+Wempty-body
+C ObjC C++ ObjC++ Var(warn_empty_body) Init(-1) Warning
+Warn about an empty body in an if or else statement
+; APPLE LOCAL end mainline
 
 Wendif-labels
 C ObjC C++ ObjC++
@@ -291,6 +310,24 @@ Wnested-externs
 C ObjC Var(warn_nested_externs)
 Warn about \"extern\" declarations not at file scope
 
+; APPLE LOCAL begin -Wnewline-eof
+Wnewline-eof
+C ObjC C++ ObjC++
+Warn about files missing a newline at the end of the file
+; APPLE LOCAL end -Wnewline-eof
+
+; APPLE LOCAL begin non lvalue assign
+Wnon-lvalue-assign
+C ObjC C++ ObjC++ Var(warn_non_lvalue_assign) Init(1)
+Warn about assignment to casts and conditional expressions of lvalues
+; APPLE LOCAL end non lvalue assign
+
+; APPLE LOCAL begin radar 5376125
+Wdirect-ivar-access
+ObjC ObjC++ Var(warn_direct_ivar_access)
+Warn about direct access to gc-enabled ivars
+; APPLE LOCAL end radar 5376125
+
 Wnon-template-friend
 C++ ObjC++ Var(warn_nontemplate_friend) Init(1)
 Warn when non-templatized friend functions are declared within a template
@@ -350,6 +387,12 @@ Warn about misuses of pragmas
 Wprotocol
 ObjC ObjC++ Var(warn_protocol) Init(1)
 Warn if inherited methods are unimplemented
+
+; APPLE LOCAL begin radar 5172645
+Wproperty-assign-default
+ObjC ObjC++ Var(warn_property_assign_default) Init(1)
+Warn if no attribute specified on property of pointer to object type (defaulted to assign)
+; APPLE LOCAL end radar 5172645
 
 Wredundant-decls
 C ObjC C++ ObjC++ Var(warn_redundant_decls)
@@ -593,6 +636,12 @@ C++ ObjC++ Joined
 fnew-abi
 C++ ObjC++
 
+; APPLE LOCAL begin nested functions 4258406 4357979
+fnested-functions
+C ObjC Var(flag_nested_functions)
+Allow nested functions.
+; APPLE LOCAL end nested functions 4258406 4357979
+
 fnext-runtime
 ObjC ObjC++
 Generate code for NeXT (Apple Mac OS X) runtime environment
@@ -601,21 +650,37 @@ fnil-receivers
 ObjC ObjC++
 Assume that receivers of Objective-C messages may be nil
 
+; APPLE LOCAL begin non lvalue assign
+fnon-lvalue-assign
+C ObjC C++ ObjC++ Var(flag_non_lvalue_assign) Init(1)
+Allow assignment to casts and conditional expressions of lvalues
+; APPLE LOCAL end non lvalue assign
+
 fnonansi-builtins
 C++ ObjC++
 
 fnonnull-objects
 C++ ObjC++
 
+; APPLE LOCAL begin radar 4705250
+fobjc-atdefs
+ObjC ObjC++ Var(flag_objc_atdefs) Init(-1)
+Allow use of @defs
+; APPLE LOCAL end radar 4705250
+
+; APPLE LOCAL begin objc2
 ; Generate special '- .cxx_construct' and '- .cxx_destruct' methods
 ; to initialize any non-POD ivars in Objective-C++ classes.
 fobjc-call-cxx-cdtors
-ObjC++ Var(flag_objc_call_cxx_cdtors)
+ObjC++ Var(flag_objc_call_cxx_cdtors) Init(-1)
 Generate special Objective-C methods to initialize/destroy non-POD C++ ivars, if needed
+; APPLE LOCAL end objc2
 
+; APPLE LOCAL begin radar 4590221
 fobjc-direct-dispatch
-ObjC ObjC++ Var(flag_objc_direct_dispatch)
+ObjC ObjC++ Var(flag_objc_direct_dispatch) Init(-1)
 Allow fast jumps to the message dispatcher
+; APPLE LOCAL end radar 4590221
 
 ; Nonzero means that we will allow new ObjC exception syntax (@throw,
 ; @try, etc.) in source code.
@@ -623,9 +688,45 @@ fobjc-exceptions
 ObjC ObjC++ Var(flag_objc_exceptions)
 Enable Objective-C exception and synchronization syntax
 
+; APPLE LOCAL begin ARM hybrid objc-2.0
+fobjc-legacy-dispatch
+ObjC ObjC++ Var(flag_objc_legacy_dispatch) Init(-1)
+Use Objective-C v1 message dispatching
+; APPLE LOCAL end ARM hybrid objc-2.0
+
+; APPLE LOCAL begin radar 2848255
+fobjc-zerocost-exceptions
+ObjC ObjC++ Var(flag_objc_zerocost_exceptions) Init(0)
+Enable Objective-C zero-cost exception
+; APPLE LOCAL end radar 2848255
+
+; APPLE LOCAL begin objc new property - not for  merge to the FSF
+fobjc-new-property
+C C++ ObjC ObjC++ Var(flag_objc_new_property) Init(1)
+Enable Objective-C new property syntax and semantics
+; APPLE LOCAL end objc new property - not for  merge to the FSF
+
+; APPLE LOCAL begin radar 5435299 - radar 6173152 
+fnew-property-ivar-synthesis
+ObjC ObjC++ Var(flag_new_property_ivar_synthesis) Init(1)
+Enable new style of fragile-ivar synthesis for properties
+; APPLE LOCAL end radar 5435299 - radar 6173152 
+
+; APPLE LOCAL begin radar 4810609
+fobjc-gc-only
+ObjC ObjC++ Var(flag_objc_gc_only)  Init(0)
+Program only supprts (GC) in ObjC/ObjC++ programs
+; APPLE LOCAL end radar 4810609
+
 fobjc-gc
 ObjC ObjC++ Var(flag_objc_gc)
 Enable garbage collection (GC) in Objective-C/Objective-C++ programs
+
+; APPLE LOCAL begin radar 5811887 - blocks
+fblocks
+C ObjC C++ ObjC++ Var(flag_blocks) Init(-1)
+Program supports c/objc extension blocks
+; APPLE LOCAL end radar 5811887 - blocks
 
 ; Nonzero means that we generate NeXT setjmp based exceptions.
 fobjc-sjlj-exceptions
@@ -852,6 +953,12 @@ C ObjC C++ ObjC++
 print-objc-runtime-info
 ObjC ObjC++
 Generate C header of platform-specific features
+
+; APPLE LOCAL begin radar 5082000
+print-objc-ivar-layout
+ObjC ObjC++
+Generate GC ivar layout information
+; APPLE LOCAL end radar 5082000
 
 print-pch-checksum
 C ObjC C++ ObjC++

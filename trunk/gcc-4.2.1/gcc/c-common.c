@@ -254,6 +254,19 @@ int flag_short_double;
 
 int flag_short_wchar;
 
+/* APPLE LOCAL begin lvalue cast */
+/* Nonzero means allow assignment, increment or decrement of casts of
+ lvalues (e.g., '((foo *)p)++') if both the lvalue and its cast are
+ of POD type with identical size and alignment.  */
+int flag_lvalue_cast_assign = 1;
+/* APPLE LOCAL end lvalue cast */
+
+/* APPLE LOCAL begin 5612787 mainline sse4 */
+/* Nonzero means allow implicit conversions between vectors with
+ differing numbers of subparts and/or differing element types.  */
+int flag_lax_vector_conversions = 1;
+/* APPLE LOCAL end 5612787 mainline sse4 */
+
 /* Nonzero means allow Microsoft extensions without warnings or errors.  */
 int flag_ms_extensions;
 
@@ -333,6 +346,12 @@ int flag_gen_declaration;
    and output a C header file with appropriate definitions.  */
 
 int print_struct_values;
+
+/* APPLE LOCAL begin radar 5082000 */
+/* Tells the compiler to print out gc's ivar layout. */
+int print_objc_ivar_layout;
+/* APPLE LOCAL end radar 5082000 */
+
 
 /* Tells the compiler what is the constant string class for Objc.  */
 
@@ -1089,18 +1108,70 @@ constant_fits_type_p (tree c, tree type)
   return !TREE_OVERFLOW (c);
 }
 
+/* APPLE LOCAL begin 5612787 mainline sse4 */
 /* Nonzero if vector types T1 and T2 can be converted to each other
-   without an explicit cast.  */
+ without an explicit cast.  */
 int
-vector_types_convertible_p (tree t1, tree t2)
+vector_types_convertible_p (tree t1, tree t2, bool emit_lax_note)
 {
-  return targetm.vector_opaque_p (t1)
-	 || targetm.vector_opaque_p (t2)
-	 || (tree_int_cst_equal (TYPE_SIZE (t1), TYPE_SIZE (t2))
-	     && (TREE_CODE (TREE_TYPE (t1)) != REAL_TYPE ||
+	static bool emitted_lax_note = false;
+	bool convertible_lax;
+	
+	if ((targetm.vector_opaque_p (t1) || targetm.vector_opaque_p (t2))
+		&& tree_int_cst_equal (TYPE_SIZE (t1), TYPE_SIZE (t2)))
+		return true;
+	
+	convertible_lax =
+    (tree_int_cst_equal (TYPE_SIZE (t1), TYPE_SIZE (t2))
+     && (TREE_CODE (TREE_TYPE (t1)) != REAL_TYPE ||
 		 TYPE_PRECISION (t1) == TYPE_PRECISION (t2))
-	     && INTEGRAL_TYPE_P (TREE_TYPE (t1))
-		== INTEGRAL_TYPE_P (TREE_TYPE (t2)));
+     && (INTEGRAL_TYPE_P (TREE_TYPE (t1))
+		 == INTEGRAL_TYPE_P (TREE_TYPE (t2))));
+	
+	if (!convertible_lax || flag_lax_vector_conversions)
+		return convertible_lax;
+	
+	if (TYPE_VECTOR_SUBPARTS (t1) == TYPE_VECTOR_SUBPARTS (t2)
+		&& comptypes (TREE_TYPE (t1), TREE_TYPE (t2)))
+		return true;
+	
+	if (emit_lax_note && !emitted_lax_note)
+    {
+		emitted_lax_note = true;
+		inform ("use -flax-vector-conversions to permit "
+				"conversions between vectors with differing "
+				"element types or numbers of subparts");
+    }
+	
+	return false;
+}
+/* APPLE LOCAL end 5612787 mainline sse4 */
+
+/* APPLE LOCAL begin mainline */
+/* Produce warnings after a conversion.  RESULT is the result of
+ converting EXPR to TYPE.  This is a helper function for
+ convert_and_check and cp_convert_and_check.  */
+
+void
+warnings_for_convert_and_check (tree type, tree expr, tree result ATTRIBUTE_UNUSED)
+{
+	if (warn_shorten_64_to_32
+		&& TYPE_PRECISION (TREE_TYPE (expr)) == 64
+		&& TYPE_PRECISION (type) == 32)
+    /* APPLE LOCAL begin 64bit shorten warning 5429810 */
+    {
+		/* As a special case, don't warn when we are working with small
+		 constants as the enum forming code shortens them into smaller
+		 types.  */
+		if (TREE_CODE (expr) == INTEGER_CST)
+		{
+			bool unsignedp = tree_int_cst_sgn (expr) >= 0;
+			if (min_precision (expr, unsignedp) <= TYPE_PRECISION (type))
+				return;
+		}
+		warning (0, "implicit conversion shortens 64-bit value into a 32-bit value");
+    }
+    /* APPLE LOCAL end 64bit shorten warning 5429810 */
 }
 
 /* Convert EXPR to TYPE, warning about conversion problems with constants.
@@ -1985,58 +2056,62 @@ min_precision (tree value, int unsignedp)
    CODE.  */
 
 void
-binary_op_error (enum tree_code code)
+/* APPLE LOCAL 5612787 mainline sse4 */
+binary_op_error (enum tree_code code, tree type0, tree type1)
 {
-  const char *opname;
-
-  switch (code)
+	const char *opname;
+	
+	switch (code)
     {
-    case PLUS_EXPR:
-      opname = "+"; break;
-    case MINUS_EXPR:
-      opname = "-"; break;
-    case MULT_EXPR:
-      opname = "*"; break;
-    case MAX_EXPR:
-      opname = "max"; break;
-    case MIN_EXPR:
-      opname = "min"; break;
-    case EQ_EXPR:
-      opname = "=="; break;
-    case NE_EXPR:
-      opname = "!="; break;
-    case LE_EXPR:
-      opname = "<="; break;
-    case GE_EXPR:
-      opname = ">="; break;
-    case LT_EXPR:
-      opname = "<"; break;
-    case GT_EXPR:
-      opname = ">"; break;
-    case LSHIFT_EXPR:
-      opname = "<<"; break;
-    case RSHIFT_EXPR:
-      opname = ">>"; break;
-    case TRUNC_MOD_EXPR:
-    case FLOOR_MOD_EXPR:
-      opname = "%"; break;
-    case TRUNC_DIV_EXPR:
-    case FLOOR_DIV_EXPR:
-      opname = "/"; break;
-    case BIT_AND_EXPR:
-      opname = "&"; break;
-    case BIT_IOR_EXPR:
-      opname = "|"; break;
-    case TRUTH_ANDIF_EXPR:
-      opname = "&&"; break;
-    case TRUTH_ORIF_EXPR:
-      opname = "||"; break;
-    case BIT_XOR_EXPR:
-      opname = "^"; break;
-    default:
-      gcc_unreachable ();
+		case PLUS_EXPR:
+			opname = "+"; break;
+		case MINUS_EXPR:
+			opname = "-"; break;
+		case MULT_EXPR:
+			opname = "*"; break;
+		case MAX_EXPR:
+			opname = "max"; break;
+		case MIN_EXPR:
+			opname = "min"; break;
+		case EQ_EXPR:
+			opname = "=="; break;
+		case NE_EXPR:
+			opname = "!="; break;
+		case LE_EXPR:
+			opname = "<="; break;
+		case GE_EXPR:
+			opname = ">="; break;
+		case LT_EXPR:
+			opname = "<"; break;
+		case GT_EXPR:
+			opname = ">"; break;
+		case LSHIFT_EXPR:
+			opname = "<<"; break;
+		case RSHIFT_EXPR:
+			opname = ">>"; break;
+		case TRUNC_MOD_EXPR:
+		case FLOOR_MOD_EXPR:
+			opname = "%"; break;
+		case TRUNC_DIV_EXPR:
+		case FLOOR_DIV_EXPR:
+			opname = "/"; break;
+		case BIT_AND_EXPR:
+			opname = "&"; break;
+		case BIT_IOR_EXPR:
+			opname = "|"; break;
+		case TRUTH_ANDIF_EXPR:
+			opname = "&&"; break;
+		case TRUTH_ORIF_EXPR:
+			opname = "||"; break;
+		case BIT_XOR_EXPR:
+			opname = "^"; break;
+		default:
+			gcc_unreachable ();
     }
-  error ("invalid operands to binary %s", opname);
+	/* APPLE LOCAL begin 5612787 mainline sse4 */
+	error ("invalid operands to binary %s (have %qT and %qT)", opname,
+		   type0, type1);
+	/* APPLE LOCAL end 5612787 mainline sse4 */
 }
 
 /* Subroutine of build_binary_op, used for comparison operations.
@@ -5683,6 +5758,168 @@ handle_warn_unused_result_attribute (tree *node, tree name,
   return NULL_TREE;
 }
 
+/* APPLE LOCAL begin radar 5932809 - copyable byref blocks */
+/* Handle "blocks" attribute. */
+static tree
+handle_blocks_attribute (tree *node, tree name, 
+						 tree args,
+						 int ARG_UNUSED (flags), bool *no_add_attrs)
+{
+	tree arg_ident;
+	/* APPLE LOCAL radar 6217257 */
+	tree type;
+	*no_add_attrs = true;
+	if (!(*node) || TREE_CODE (*node) != VAR_DECL)
+    {
+		error ("__block attribute can be specified on variables only");
+		return NULL_TREE;
+    }
+	arg_ident = TREE_VALUE (args);
+	gcc_assert (TREE_CODE (arg_ident) == IDENTIFIER_NODE);
+	/* APPLE LOCAL radar 6096219 */
+	if (strcmp (IDENTIFIER_POINTER (arg_ident), "byref"))
+    {
+		/* APPLE LOCAL radar 6096219 */
+		warning (OPT_Wattributes, "Only \"byref\" is allowed - %qE attribute ignored", 
+				 name);
+		return NULL_TREE;
+    }
+	/* APPLE LOCAL begin radar 6217257 */
+	type = TREE_TYPE (*node);
+	if (TREE_CODE (type) == ERROR_MARK)
+		return NULL_TREE;
+	if (TREE_CODE (type) == ARRAY_TYPE)
+	{
+		if (!TYPE_SIZE (type) || TREE_CODE (TYPE_SIZE (type)) != INTEGER_CST)
+		{
+			error ("__block not allowed on a variable length array declaration");
+			return NULL_TREE;
+		}
+	}
+	/* APPLE LOCAL end radar 6217257 */
+	COPYABLE_BYREF_LOCAL_VAR (*node) = 1;
+	COPYABLE_BYREF_LOCAL_NONPOD (*node) = block_requires_copying (*node);
+	return NULL_TREE;
+}
+/* APPLE LOCAL end radar 5932809 - copyable byref blocks */
+
+/* APPLE LOCAL begin blocks 6040305 */
+
+/* This routine builds:
+ *(void **)(EXP+20) expression which references the object pointer.
+ */
+tree
+build_indirect_object_id_exp (tree exp)
+{
+	tree dst_obj;
+	int  int_size = int_cst_value (TYPE_SIZE_UNIT (unsigned_type_node));
+	int offset;
+	/* dst->object In thid case 'object' is the field
+	 of the object passed offset by: void * + void* + int + int + void* + void *
+	 This must match definition of Block_byref structs. */
+	/* APPLE LOCAL radar 6244520 */
+	offset = GET_MODE_SIZE (Pmode) + GET_MODE_SIZE (Pmode) 
+	+ int_size + int_size + GET_MODE_SIZE (Pmode) +
+	GET_MODE_SIZE (Pmode);
+	dst_obj = build2 (PLUS_EXPR, ptr_type_node, exp,
+					  build_int_cst (NULL_TREE, offset));
+	/* APPLE LOCAL begin radar 6180456 */
+	/* Type case to: 'void **' */
+	dst_obj = build_c_cast (build_pointer_type (ptr_type_node), dst_obj);
+	dst_obj = build_indirect_ref (dst_obj, "unary *");
+	/* APPLE LOCAL end radar 6180456 */
+	return dst_obj;
+}
+
+/* This routine builds call to:
+ _Block_object_dispose(VAR_DECL.__forwarding, BLOCK_FIELD_IS_BYREF);
+ and adds it to the statement list.
+ */
+tree
+build_block_byref_release_exp (tree var_decl)
+{
+	tree exp = var_decl, call_exp;
+	tree type = TREE_TYPE (var_decl);
+	/* __block variables imported into Blocks are not _Block_object_dispose()
+	 from within the Block statement itself; otherwise, each envokation of
+	 the block causes a release. Make sure to release __block variables declared 
+	 and used locally in the block though. */
+	if (cur_block 
+		&& (BLOCK_DECL_COPIED (var_decl) || BLOCK_DECL_BYREF (var_decl)))
+		return NULL_TREE;
+	if (BLOCK_DECL_BYREF (var_decl)) {
+		/* This is a "struct Block_byref_X *" type. Get its pointee. */
+		gcc_assert (POINTER_TYPE_P (type));
+		type = TREE_TYPE (type);
+		exp = build_indirect_ref (exp, "unary *");
+	}
+	TREE_USED (var_decl) = 1;
+	
+	/* Declare: _Block_object_dispose(void*, BLOCK_FIELD_IS_BYREF) if not done already. */
+	exp = build_component_ref (exp, get_identifier ("__forwarding"));
+	call_exp = build_block_object_dispose_call_exp (exp, BLOCK_FIELD_IS_BYREF);
+	return call_exp;
+}
+/* APPLE LOCAL end blocks 6040305 */
+/* APPLE LOCAL begin radar 5803600 */
+/** add_block_global_byref_list - Adds global variable decl to the list of
+ byref global declarations in the current block.
+ */
+void add_block_global_byref_list (tree decl)
+{
+	cur_block->block_byref_global_decl_list = 
+    tree_cons (NULL_TREE, decl, cur_block->block_byref_global_decl_list);
+}
+
+/** in_block_global_byref_list - returns TRUE if global variable is
+ in the list of 'byref' declarations.
+ */
+bool in_block_global_byref_list (tree decl)
+{
+	tree chain;
+	if (TREE_STATIC (decl)) {
+		for (chain = cur_block->block_byref_global_decl_list; chain;
+			 chain = TREE_CHAIN (chain))
+			if (TREE_VALUE (chain) == decl)
+				return true;
+	}
+	return false;
+}
+/* APPLE LOCAL end radar 5803600 */
+
+/* APPLE LOCAL begin radar 6160536 */
+tree
+build_block_helper_name (int unique_count)
+{
+	char *buf;
+	if (!current_function_decl)
+    {
+		/* APPLE LOCAL begin radar 6411649 */
+		static int global_count;
+		buf = (char *)alloca (32);
+		sprintf (buf, "__block_global_%d", ++global_count);
+		/* APPLE LOCAL end radar 6411649 */
+    }
+	else
+    {
+		tree outer_decl = current_function_decl;
+		/* APPLE LOCAL begin radar 6169580 */
+		while (outer_decl &&
+			   DECL_CONTEXT (outer_decl) && TREE_CODE (DECL_CONTEXT (outer_decl)) == FUNCTION_DECL)
+		/* APPLE LOCAL end radar 6169580 */
+			outer_decl = DECL_CONTEXT (outer_decl);
+		/* APPLE LOCAL begin radar 6411649 */
+		if (!unique_count)
+			unique_count = ++DECL_STRUCT_FUNCTION(outer_decl)->unqiue_block_number;
+		/* APPLE LOCAL end radar 6411649 */
+		buf = (char *)alloca (IDENTIFIER_LENGTH (DECL_NAME (outer_decl)) + 32); 
+		sprintf (buf, "__%s_block_invoke_%d", 
+				 IDENTIFIER_POINTER (DECL_NAME (outer_decl)), unique_count);
+    }
+	return get_identifier (buf); 
+}
+/* APPLE LOCAL end radar 6160536 */
+
 /* Handle a "sentinel" attribute.  */
 
 static tree
@@ -6157,6 +6394,86 @@ fold_offsetof (tree expr, tree stop_ref)
   return convert (size_type_node, fold_offsetof_1 (expr, stop_ref));
 }
 
+/* APPLE LOCAL begin non lvalue assign */
+int lvalue_or_else (tree*, enum lvalue_use);
+
+/* Return nonzero if the expression pointed to by REF is an lvalue
+ valid for this language; otherwise, print an error message and return
+ zero.  USE says how the lvalue is being used and so selects the error
+ message.  If -fnon-lvalue-assign has been specified, certain
+ non-lvalue expression shall be rewritten as lvalues and stored back
+ at the location pointed to by REF.  */
+
+bool
+lvalue_or_else_1 (tree *ref, enum lvalue_use use)
+{
+	tree r = *ref;
+	bool win = false;
+	
+	/* If -fnon-lvalue-assign is specified, we shall allow assignments
+     to certain constructs that are not (stricly speaking) lvalues.  */
+	if (flag_non_lvalue_assign)
+    {
+		/* (1) Assignment to casts of lvalues, as long as both the lvalue and
+	     the cast are POD types with identical size and alignment.  */
+		if ((TREE_CODE (r) == NOP_EXPR || TREE_CODE (r) == CONVERT_EXPR
+			 /* APPLE LOCAL 4253848 */
+			 || TREE_CODE (r) == VIEW_CONVERT_EXPR || TREE_CODE (r) == NON_LVALUE_EXPR)
+			&& (use == lv_assign || use == lv_increment || use == lv_decrement
+				|| use == lv_addressof)
+			/* APPLE LOCAL non lvalue assign */
+			&& lvalue_or_else (&TREE_OPERAND (r, 0), use))
+		{
+			tree cast_to = TREE_TYPE (r);
+			tree cast_from = TREE_TYPE (TREE_OPERAND (r, 0));
+			
+			if (simple_cst_equal (TYPE_SIZE (cast_to), TYPE_SIZE (cast_from))
+				&& TYPE_ALIGN (cast_to) == TYPE_ALIGN (cast_from))
+			{
+				/* Rewrite '(cast_to)ref' as '*(cast_to *)&ref' so
+				 that the back-end need not think too hard...  */
+				*ref
+				= build_indirect_ref
+				(convert (build_pointer_type (cast_to),
+						  build_unary_op
+						  (ADDR_EXPR, TREE_OPERAND (r, 0), 0)), 0);
+				
+				goto allow_as_lvalue;
+			}
+		}
+		/* (2) Assignment to conditional expressions, as long as both
+	     alternatives are already lvalues.  */
+		else if (TREE_CODE (r) == COND_EXPR
+				 /* APPLE LOCAL non lvalue assign */
+				 && lvalue_or_else (&TREE_OPERAND (r, 1), use)
+				 /* APPLE LOCAL non lvalue assign */
+				 && lvalue_or_else (&TREE_OPERAND (r, 2), use))
+		{
+			/* Rewrite 'cond ? lv1 : lv2' as '*(cond ? &lv1 : &lv2)' to
+			 placate the back-end.  */
+			*ref
+			= build_indirect_ref
+			(build_conditional_expr
+			 (TREE_OPERAND (r, 0),
+			  build_unary_op (ADDR_EXPR, TREE_OPERAND (r, 1), 0),
+			  build_unary_op (ADDR_EXPR, TREE_OPERAND (r, 2), 0)),
+			 0);
+			
+		allow_as_lvalue:
+			win = true;
+			if (warn_non_lvalue_assign)
+				warning (0, "%s not really an lvalue; "
+						 "this will be a hard error in the future",
+						 (use == lv_addressof
+						  ? "argument to '&'"
+						  : "target of assignment"));
+		}
+    }
+	
+	return win;
+}
+/* APPLE LOCAL end non-lvalue assign */
+
 /* Print an error message for an invalid lvalue.  USE says
    how the lvalue is being used and so selects the error message.  */
 
@@ -6180,6 +6497,11 @@ lvalue_error (enum lvalue_use use)
     case lv_asm:
       error ("lvalue required in asm statement");
       break;
+			/* APPLE LOCAL begin radar 5130983 */
+		case lv_foreach:
+			error ("selector element must be an lvalue");
+			break;
+			/* APPLE LOCAL end radar 5130983 */
     default:
       gcc_unreachable ();
     }
@@ -6516,6 +6838,135 @@ warn_array_subscript_with_type_char (tree index)
       && TREE_CODE (index) != INTEGER_CST)
     warning (OPT_Wchar_subscripts, "array subscript has type %<char%>");
 }
+
+/* APPLE LOCAL begin radar 6246527 */
+/* This routine is called for a "format" attribute. It adds the number of
+ hidden argument ('1') to the format's 2nd and 3rd argument to compensate
+ for these two arguments. This is to make rest of the "format" attribute
+ processing done in the middle-end to work seemlessly. */
+
+static void
+block_delta_format_args (tree format)
+{
+	tree format_num_expr, first_arg_num_expr;
+	int val; 
+	tree args = TREE_VALUE (format);
+	gcc_assert (TREE_CHAIN (args) && TREE_CHAIN (TREE_CHAIN (args)));
+	format_num_expr = TREE_VALUE (TREE_CHAIN (args));
+	first_arg_num_expr = TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args)));
+	if (format_num_expr && TREE_CODE (format_num_expr) == INTEGER_CST)
+	{
+		val = TREE_INT_CST_LOW (format_num_expr);
+		TREE_VALUE (TREE_CHAIN (args)) = build_int_cst (NULL_TREE, val+1);
+	}
+	if (first_arg_num_expr && TREE_CODE (first_arg_num_expr) == INTEGER_CST)
+	{
+		val = TREE_INT_CST_LOW (first_arg_num_expr);
+		if (val != 0)
+			TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args))) = 
+			build_int_cst (NULL_TREE, val+1);
+	}
+}
+
+/* This routine recognizes legal block attributes. In case of block's "format" 
+ attribute, it calls block_delta_format_args to compensate for hidden 
+ argument _self getting passed to block's helper function. */
+bool
+any_recognized_block_attribute (tree attributes)
+{
+	tree chain;
+	bool res = false;
+	for (chain = attributes; chain; chain = TREE_CHAIN (chain))
+	{
+		if (is_attribute_p ("format", TREE_PURPOSE (chain)))
+		{
+			block_delta_format_args (chain);
+			res = true;
+		}
+		else if (is_attribute_p ("sentinel", TREE_PURPOSE (chain)))
+			res = true;	
+	}
+	return res;
+}
+/* APPLE LOCAL end radar 6246527 */
+
+/* APPLE LOCAL begin radar 5847976 */
+static GTY(()) tree block_object_assign_decl;
+static GTY(()) tree block_object_dispose_func_decl;
+/* This routine declares:
+ void _Block_object_assign (void *, void *, int) or uses an
+ existing one.
+ */
+static tree
+build_block_object_assign_decl (void)
+{
+	tree func_type;
+	if (block_object_assign_decl)
+		return block_object_assign_decl;
+	block_object_assign_decl = lookup_name (get_identifier ("_Block_object_assign"));
+	if (block_object_assign_decl)
+		return block_object_assign_decl;
+	func_type =
+	build_function_type (void_type_node,
+						 tree_cons (NULL_TREE, ptr_type_node,
+									tree_cons (NULL_TREE, ptr_type_node,
+											   tree_cons (NULL_TREE, integer_type_node, void_list_node))));
+	
+	block_object_assign_decl = builtin_function ("_Block_object_assign", func_type,
+												 0, NOT_BUILT_IN, 0, NULL_TREE);
+	TREE_NOTHROW (block_object_assign_decl) = 0;
+	return block_object_assign_decl;
+}
+
+/* This routine builds:
+ _Block_object_assign(dest, src, flag)
+ */
+tree build_block_object_assign_call_exp (tree dst, tree src, int flag)
+{
+	tree func_params = tree_cons (NULL_TREE, dst,
+								  tree_cons (NULL_TREE, src,
+											 tree_cons (NULL_TREE,
+														build_int_cst (integer_type_node, flag),
+														NULL_TREE)));
+	return build_function_call (build_block_object_assign_decl (), func_params);
+}
+
+/* This routine declares:
+ void _Block_object_dispose (void *, int) or uses an
+ existing one.
+ */
+static tree
+build_block_object_dispose_decl (void)
+{
+	tree func_type;
+	if (block_object_dispose_func_decl)
+		return block_object_dispose_func_decl;
+	block_object_dispose_func_decl = lookup_name (get_identifier ("_Block_object_dispose"));
+	if (block_object_dispose_func_decl)
+		return block_object_dispose_func_decl;
+	func_type =
+	build_function_type (void_type_node,
+						 tree_cons (NULL_TREE, ptr_type_node,
+									tree_cons (NULL_TREE, integer_type_node, void_list_node)));
+	
+	block_object_dispose_func_decl = builtin_function ("_Block_object_dispose", func_type,
+													   0, NOT_BUILT_IN, 0, NULL_TREE);
+	TREE_NOTHROW (block_object_dispose_func_decl) = 0;
+	return block_object_dispose_func_decl;
+}
+
+/* This routine builds the call tree:
+ _Block_object_dispose(src, flag)
+ */
+tree build_block_object_dispose_call_exp (tree src, int flag)
+{
+	tree func_params = tree_cons (NULL_TREE, src, 
+								  tree_cons (NULL_TREE,
+											 build_int_cst (integer_type_node, flag),
+											 NULL_TREE));
+	return build_function_call (build_block_object_dispose_decl (), func_params);
+}
+/* APPLE LOCAL end radar 5847976 */
 
 /* Implement -Wparentheses for the unexpected C precedence rules, to
    cover cases like x + y << z which readers are likely to

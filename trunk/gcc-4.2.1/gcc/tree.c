@@ -69,6 +69,10 @@ const char *const tree_code_class_strings[] =
   "expression",
 };
 
+/* APPLE LOCAL begin 6353006  */
+tree generic_block_literal_struct_type;
+/* APPLE LOCAL end 6353006  */
+
 /* obstack.[ch] explicitly declined to prototype this.  */
 extern int _obstack_allocated_p (struct obstack *h, void *obj);
 
@@ -5014,6 +5018,31 @@ build_pointer_type (tree to_type)
   return build_pointer_type_for_mode (to_type, ptr_mode, false);
 }
 
+/* APPLE LOCAL begin radar 5732232 - blocks */
+tree
+build_block_pointer_type (tree to_type)
+{
+	tree t;
+	
+	/* APPLE LOCAL begin radar 6300081 & 6353006 */
+	if (!generic_block_literal_struct_type)
+		generic_block_literal_struct_type = 
+		lang_hooks.build_generic_block_struct_type ();
+	/* APPLE LOCAL end radar 6300081 & 6353006 */
+	
+	t = make_node (BLOCK_POINTER_TYPE);
+	
+	TREE_TYPE (t) = to_type;
+	TYPE_MODE (t) = ptr_mode;
+	
+	/* Lay out the type.  This function has many callers that are concerned
+     with expression-construction, and this simplifies them all.  */
+	layout_type (t);
+	
+	return t;
+}
+/* APPLE LOCAL end radar 5732232 - blocks */
+
 /* Same as build_pointer_type_for_mode, but for REFERENCE_TYPE.  */
 
 tree
@@ -7771,5 +7800,20 @@ empty_body_p (tree stmt)
 
   return true;
 }
+
+/* APPLE LOCAL begin weak_import on property 6676828 */
+static GTY(()) int objc_property_decl_context;
+
+void note_objc_property_decl_context (void) {
+	objc_property_decl_context = 1;
+}
+void note_end_objc_property_decl_context (void) {
+	objc_property_decl_context = 0;
+}
+bool in_objc_property_decl_context (void) {
+	return objc_property_decl_context;
+}
+/* APPLE LOCAL end weak_import on property 6676828 */
+
 
 #include "gt-tree.h"
