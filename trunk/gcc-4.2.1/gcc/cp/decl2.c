@@ -3023,6 +3023,10 @@ build_java_method_aliases (void)
     }
 }
 
+/* APPLE LOCAL begin radar 4721858 */
+static void emit_deferred (location_t *);
+/* APPLE LOCAL end radar 4721858 */
+
 /* This routine is called from the last rule in yyparse ().
    Its job is to create all the code needed to initialize and
    destroy the global aggregates.  We do the destruction
@@ -3031,363 +3035,414 @@ build_java_method_aliases (void)
 void
 cp_finish_file (void)
 {
-  tree vars;
-  bool reconsider;
-  size_t i;
-  location_t locus;
-  unsigned ssdf_count = 0;
-  int retries = 0;
-  tree decl;
-
-  locus = input_location;
-  at_eof = 1;
-
-  /* Bad parse errors.  Just forget about it.  */
-  if (! global_bindings_p () || current_class_type || decl_namespace_list)
-    return;
-
-  if (pch_file)
-    c_common_write_pch ();
-
+	/* APPLE LOCAL begin radar 4721858 */
+	location_t locus;
+	/* APPLE LOCAL end radar 4721858 */
+	
+	locus = input_location;
+	at_eof = 1;
+	
+	/* Bad parse errors.  Just forget about it.  */
+	if (! global_bindings_p () || current_class_type || decl_namespace_list)
+		return;
+	
+	/* APPLE LOCAL radar 4874613 */
+	/* dump of pch file moved to c_parse_file (). */
+	
 #ifdef USE_MAPPED_LOCATION
-  /* FIXME - huh? */
+	/* FIXME - huh? */
 #else
-  /* Otherwise, GDB can get confused, because in only knows
+	/* Otherwise, GDB can get confused, because in only knows
      about source for LINENO-1 lines.  */
-  input_line -= 1;
+	input_line -= 1;
 #endif
-
-  /* We now have to write out all the stuff we put off writing out.
+	
+	/* We now have to write out all the stuff we put off writing out.
      These include:
-
-       o Template specializations that we have not yet instantiated,
+	 
+	 o Template specializations that we have not yet instantiated,
 	 but which are needed.
-       o Initialization and destruction for non-local objects with
+	 o Initialization and destruction for non-local objects with
 	 static storage duration.  (Local objects with static storage
 	 duration are initialized when their scope is first entered,
 	 and are cleaned up via atexit.)
-       o Virtual function tables.
-
+	 o Virtual function tables.
+	 
      All of these may cause others to be needed.  For example,
      instantiating one function may cause another to be needed, and
      generating the initializer for an object may cause templates to be
      instantiated, etc., etc.  */
+	
+	timevar_push (TV_VARCONST);
+	
+	emit_support_tinfos ();
+	
+	/* APPLE LOCAL begin radar 4721858 */
+	emit_instantiate_pending_templates (&locus);
+	
+	emit_deferred (&locus);
+}
 
-  timevar_push (TV_VARCONST);
-
-  emit_support_tinfos ();
-
-  do
+static void
+emit_deferred (location_t *locusp)
+{
+	size_t i;
+	tree decl;
+	bool reconsider = false;
+	/* APPLE LOCAL end radar 4721858 */
+	/* All used inline functions must have a definition at this point.  */
+	for (i = 0; VEC_iterate (tree, deferred_fns, i, decl); ++i)
     {
-      tree t;
-      tree decl;
-
-      reconsider = false;
-
-      /* If there are templates that we've put off instantiating, do
-	 them now.  */
-      instantiate_pending_templates (retries);
-      ggc_collect ();
-
-      /* Write out virtual tables as required.  Note that writing out
-	 the virtual table for a template class may cause the
-	 instantiation of members of that class.  If we write out
-	 vtables then we remove the class from our list so we don't
-	 have to look at it again.  */
-
-      while (keyed_classes != NULL_TREE
-	     && maybe_emit_vtables (TREE_VALUE (keyed_classes)))
-	{
-	  reconsider = true;
-	  keyed_classes = TREE_CHAIN (keyed_classes);
-	}
-
-      t = keyed_classes;
-      if (t != NULL_TREE)
-	{
-	  tree next = TREE_CHAIN (t);
-
-	  while (next)
-	    {
-	      if (maybe_emit_vtables (TREE_VALUE (next)))
+		if (/* Check online inline functions that were actually used.  */
+			TREE_USED (decl) && DECL_DECLARED_INLINE_P (decl)
+			/* If the definition actually was available here, then the
+			 fact that the function was not defined merely represents
+			 that for some reason (use of a template repository,
+			 #pragma interface, etc.) we decided not to emit the
+			 definition here.  */
+			&& !DECL_INITIAL (decl)
+			/* An explicit instantiation can be used to specify
+			 that the body is in another unit. It will have
+			 already verified there was a definition.  */
+			&& !DECL_EXPLICIT_INSTANTIATION (decl))
 		{
-		  reconsider = true;
-		  TREE_CHAIN (t) = TREE_CHAIN (next);
+			warning (0, "inline function %q+D used but never defined", decl);
+			/* Avoid a duplicate warning from check_global_declaration_1.  */
+			TREE_NO_WARNING (decl) = 1;
 		}
-	      else
-		t = next;
-
-	      next = TREE_CHAIN (t);
-	    }
-	}
-
-      /* Write out needed type info variables.  We have to be careful
-	 looping through unemitted decls, because emit_tinfo_decl may
-	 cause other variables to be needed. New elements will be
-	 appended, and we remove from the vector those that actually
-	 get emitted.  */
-      for (i = VEC_length (tree, unemitted_tinfo_decls);
-	   VEC_iterate (tree, unemitted_tinfo_decls, --i, t);)
-	if (emit_tinfo_decl (t))
-	  {
-	    reconsider = true;
-	    VEC_unordered_remove (tree, unemitted_tinfo_decls, i);
-	  }
-
-      /* The list of objects with static storage duration is built up
-	 in reverse order.  We clear STATIC_AGGREGATES so that any new
-	 aggregates added during the initialization of these will be
-	 initialized in the correct order when we next come around the
-	 loop.  */
-      vars = prune_vars_needing_no_initialization (&static_aggregates);
-
-      if (vars)
-	{
-	  /* We need to start a new initialization function each time
-	     through the loop.  That's because we need to know which
-	     vtables have been referenced, and TREE_SYMBOL_REFERENCED
-	     isn't computed until a function is finished, and written
-	     out.  That's a deficiency in the back-end.  When this is
-	     fixed, these initialization functions could all become
-	     inline, with resulting performance improvements.  */
-	  tree ssdf_body;
-
-	  /* Set the line and file, so that it is obviously not from
-	     the source file.  */
-	  input_location = locus;
-	  ssdf_body = start_static_storage_duration_function (ssdf_count);
-
-	  /* Make sure the back end knows about all the variables.  */
-	  write_out_vars (vars);
-
-	  /* First generate code to do all the initializations.  */
-	  if (vars)
-	    do_static_initialization_or_destruction (vars, /*initp=*/true);
-
-	  /* Then, generate code to do all the destructions.  Do these
-	     in reverse order so that the most recently constructed
-	     variable is the first destroyed.  If we're using
-	     __cxa_atexit, then we don't need to do this; functions
-	     were registered at initialization time to destroy the
-	     local statics.  */
-	  if (!flag_use_cxa_atexit && vars)
-	    {
-	      vars = nreverse (vars);
-	      do_static_initialization_or_destruction (vars, /*initp=*/false);
-	    }
-	  else
-	    vars = NULL_TREE;
-
-	  /* Finish up the static storage duration function for this
-	     round.  */
-	  input_location = locus;
-	  finish_static_storage_duration_function (ssdf_body);
-
-	  /* All those initializations and finalizations might cause
-	     us to need more inline functions, more template
-	     instantiations, etc.  */
-	  reconsider = true;
-	  ssdf_count++;
-#ifdef USE_MAPPED_LOCATION
-	  /* ??? */
-#else
-	  locus.line++;
-#endif
-	}
-
-      /* Go through the set of inline functions whose bodies have not
-	 been emitted yet.  If out-of-line copies of these functions
-	 are required, emit them.  */
-      for (i = 0; VEC_iterate (tree, deferred_fns, i, decl); ++i)
-	{
-	  /* Does it need synthesizing?  */
-	  if (DECL_ARTIFICIAL (decl) && ! DECL_INITIAL (decl)
-	      && (! DECL_REALLY_EXTERN (decl) || DECL_INLINE (decl)))
-	    {
-	      /* Even though we're already at the top-level, we push
-		 there again.  That way, when we pop back a few lines
-		 hence, all of our state is restored.  Otherwise,
-		 finish_function doesn't clean things up, and we end
-		 up with CURRENT_FUNCTION_DECL set.  */
-	      push_to_top_level ();
-	      /* The decl's location will mark where it was first
-		 needed.  Save that so synthesize method can indicate
-		 where it was needed from, in case of error  */
-	      input_location = DECL_SOURCE_LOCATION (decl);
-	      synthesize_method (decl);
-	      pop_from_top_level ();
-	      reconsider = true;
-	    }
-
-	  if (!DECL_SAVED_TREE (decl))
-	    continue;
-
-	  /* We lie to the back-end, pretending that some functions
-	     are not defined when they really are.  This keeps these
-	     functions from being put out unnecessarily.  But, we must
-	     stop lying when the functions are referenced, or if they
-	     are not comdat since they need to be put out now.  If
-	     DECL_INTERFACE_KNOWN, then we have already set
-	     DECL_EXTERNAL appropriately, so there's no need to check
-	     again, and we do not want to clear DECL_EXTERNAL if a
-	     previous call to import_export_decl set it.
-
-	     This is done in a separate for cycle, because if some
-	     deferred function is contained in another deferred
-	     function later in deferred_fns varray,
-	     rest_of_compilation would skip this function and we
-	     really cannot expand the same function twice.  */
-	  import_export_decl (decl);
-	  if (DECL_NOT_REALLY_EXTERN (decl)
-	      && DECL_INITIAL (decl)
-	      && decl_needed_p (decl))
-	    DECL_EXTERNAL (decl) = 0;
-
-	  /* If we're going to need to write this function out, and
-	     there's already a body for it, create RTL for it now.
-	     (There might be no body if this is a method we haven't
-	     gotten around to synthesizing yet.)  */
-	  if (!DECL_EXTERNAL (decl)
-	      && decl_needed_p (decl)
-	      && !TREE_ASM_WRITTEN (decl)
-	      && !cgraph_node (decl)->local.finalized)
-	    {
-	      /* We will output the function; no longer consider it in this
-		 loop.  */
-	      DECL_DEFER_OUTPUT (decl) = 0;
-	      /* Generate RTL for this function now that we know we
-		 need it.  */
-	      expand_or_defer_fn (decl);
-	      /* If we're compiling -fsyntax-only pretend that this
-		 function has been written out so that we don't try to
-		 expand it again.  */
-	      if (flag_syntax_only)
-		TREE_ASM_WRITTEN (decl) = 1;
-	      reconsider = true;
-	    }
-	}
-
-      if (walk_namespaces (wrapup_globals_for_namespace, /*data=*/0))
-	reconsider = true;
-
-      /* Static data members are just like namespace-scope globals.  */
-      for (i = 0; VEC_iterate (tree, pending_statics, i, decl); ++i)
-	{
-	  if (var_finalized_p (decl) || DECL_REALLY_EXTERN (decl))
-	    continue;
-	  import_export_decl (decl);
-	  /* If this static data member is needed, provide it to the
-	     back end.  */
-	  if (DECL_NOT_REALLY_EXTERN (decl) && decl_needed_p (decl))
-	    DECL_EXTERNAL (decl) = 0;
-	}
-      if (VEC_length (tree, pending_statics) != 0
-	  && wrapup_global_declarations (VEC_address (tree, pending_statics),
-					 VEC_length (tree, pending_statics)))
-	reconsider = true;
-
-      retries++;
     }
-  while (reconsider);
-
-  /* All used inline functions must have a definition at this point.  */
-  for (i = 0; VEC_iterate (tree, deferred_fns, i, decl); ++i)
-    {
-      if (/* Check online inline functions that were actually used.  */
-	  TREE_USED (decl) && DECL_DECLARED_INLINE_P (decl)
-	  /* If the definition actually was available here, then the
-	     fact that the function was not defined merely represents
-	     that for some reason (use of a template repository,
-	     #pragma interface, etc.) we decided not to emit the
-	     definition here.  */
-	  && !DECL_INITIAL (decl)
-	  /* An explicit instantiation can be used to specify
-	     that the body is in another unit. It will have
-	     already verified there was a definition.  */
-	  && !DECL_EXPLICIT_INSTANTIATION (decl))
-	{
-	  warning (0, "inline function %q+D used but never defined", decl);
-	  /* Avoid a duplicate warning from check_global_declaration_1.  */
-	  TREE_NO_WARNING (decl) = 1;
-	}
-    }
-
-  /* We give C linkage to static constructors and destructors.  */
-  push_lang_context (lang_name_c);
-
-  /* Generate initialization and destruction functions for all
+	
+	/* We give C linkage to static constructors and destructors.  */
+	push_lang_context (lang_name_c);
+	
+	/* Generate initialization and destruction functions for all
      priorities for which they are required.  */
-  if (priority_info_map)
-    splay_tree_foreach (priority_info_map,
-			generate_ctor_and_dtor_functions_for_priority,
-			/*data=*/&locus);
-  else
+	if (priority_info_map)
+		splay_tree_foreach (priority_info_map,
+							generate_ctor_and_dtor_functions_for_priority,
+							/* APPLE LOCAL radar 4721858 */
+							/*data=*/locusp);
+	else
     {
-      /* If we have a ctor or this is obj-c++ and we need a static init,
-	 call generate_ctor_or_dtor_function.  */
-      if (static_ctors || (c_dialect_objc () && objc_static_init_needed_p ()))
-	generate_ctor_or_dtor_function (/*constructor_p=*/true,
-					DEFAULT_INIT_PRIORITY, &locus);
-      if (static_dtors)
-	generate_ctor_or_dtor_function (/*constructor_p=*/false,
-					DEFAULT_INIT_PRIORITY, &locus);
+		/* If we have a ctor or this is obj-c++ and we need a static init,
+		 call generate_ctor_or_dtor_function.  */
+		if (static_ctors || (c_dialect_objc () && objc_static_init_needed_p ()))
+			generate_ctor_or_dtor_function (/*constructor_p=*/true,
+											/* APPLE LOCAL radar 4721858 */
+											DEFAULT_INIT_PRIORITY, locusp);
+		if (static_dtors)
+			generate_ctor_or_dtor_function (/*constructor_p=*/false,
+											/* APPLE LOCAL radar 4721858 */
+											DEFAULT_INIT_PRIORITY, locusp);
     }
-
-  /* We're done with the splay-tree now.  */
-  if (priority_info_map)
-    splay_tree_delete (priority_info_map);
-
-  /* Generate any missing aliases.  */
-  maybe_apply_pending_pragma_weaks ();
-
-  /* We're done with static constructors, so we can go back to "C++"
+	
+	/* We're done with the splay-tree now.  */
+	if (priority_info_map)
+		splay_tree_delete (priority_info_map);
+	
+	/* Generate any missing aliases.  */
+	maybe_apply_pending_pragma_weaks ();
+	
+	/* We're done with static constructors, so we can go back to "C++"
      linkage now.  */
-  pop_lang_context ();
-
-  cgraph_finalize_compilation_unit ();
-  cgraph_optimize ();
-
-  /* Now, issue warnings about static, but not defined, functions,
+	pop_lang_context ();
+	
+	cgraph_finalize_compilation_unit ();
+	cgraph_optimize ();
+	
+	/* Now, issue warnings about static, but not defined, functions,
      etc., and emit debugging information.  */
-  walk_namespaces (wrapup_globals_for_namespace, /*data=*/&reconsider);
-  if (VEC_length (tree, pending_statics) != 0)
+	walk_namespaces (wrapup_globals_for_namespace, /*data=*/&reconsider);
+	if (VEC_length (tree, pending_statics) != 0)
     {
-      check_global_declarations (VEC_address (tree, pending_statics),
-				 VEC_length (tree, pending_statics));
-      emit_debug_global_declarations (VEC_address (tree, pending_statics),
-				      VEC_length (tree, pending_statics));
+		check_global_declarations (VEC_address (tree, pending_statics),
+								   VEC_length (tree, pending_statics));
+		emit_debug_global_declarations (VEC_address (tree, pending_statics),
+										VEC_length (tree, pending_statics));
     }
-
-  /* Generate hidden aliases for Java.  */
-  build_java_method_aliases ();
-
-  finish_repo ();
-
-  /* The entire file is now complete.  If requested, dump everything
+	
+	/* Generate hidden aliases for Java.  */
+	build_java_method_aliases ();
+	
+	finish_repo ();
+	
+	/* The entire file is now complete.  If requested, dump everything
      to a file.  */
-  {
-    int flags;
-    FILE *stream = dump_begin (TDI_tu, &flags);
-
-    if (stream)
-      {
-	dump_node (global_namespace, flags & ~TDF_SLIM, stream);
-	dump_end (TDI_tu, stream);
-      }
-  }
-
-  timevar_pop (TV_VARCONST);
-
-  if (flag_detailed_statistics)
+	{
+		int flags;
+		FILE *stream = dump_begin (TDI_tu, &flags);
+		
+		if (stream)
+		{
+			dump_node (global_namespace, flags & ~TDF_SLIM, stream);
+			dump_end (TDI_tu, stream);
+		}
+	}
+	
+	timevar_pop (TV_VARCONST);
+	
+	if (flag_detailed_statistics)
     {
-      dump_tree_statistics ();
-      dump_time_statistics ();
+		dump_tree_statistics ();
+		dump_time_statistics ();
     }
-  input_location = locus;
-
+	/* APPLE LOCAL radar 4721858 */
+	input_location = *locusp;
+	
 #ifdef ENABLE_CHECKING
-  validate_conversion_obstack ();
+	validate_conversion_obstack ();
 #endif /* ENABLE_CHECKING */
+}
+
+/* This routine emits pending functions and instatiates pending templates
+ as more opportunities arises. */
+
+void
+emit_instantiate_pending_templates (location_t *locusp)
+{
+	tree vars;
+	bool reconsider;
+	size_t i;
+	unsigned ssdf_count = 0;
+	int retries = 0;
+	
+	/* APPLE LOCAL radar 4874626 */
+	/* initialization removed. */
+	at_eof = 1;
+	/* APPLE LOCAL end radar 4721858 */
+	
+	do
+    {
+		tree t;
+		tree decl;
+		
+		reconsider = false;
+		
+		/* If there are templates that we've put off instantiating, do
+		 them now.  */
+		instantiate_pending_templates (retries);
+		ggc_collect ();
+		
+		/* Write out virtual tables as required.  Note that writing out
+		 the virtual table for a template class may cause the
+		 instantiation of members of that class.  If we write out
+		 vtables then we remove the class from our list so we don't
+		 have to look at it again.  */
+		
+		while (keyed_classes != NULL_TREE
+			   && maybe_emit_vtables (TREE_VALUE (keyed_classes)))
+		{
+			reconsider = true;
+			keyed_classes = TREE_CHAIN (keyed_classes);
+		}
+		
+		t = keyed_classes;
+		if (t != NULL_TREE)
+		{
+			tree next = TREE_CHAIN (t);
+			
+			while (next)
+			{
+				if (maybe_emit_vtables (TREE_VALUE (next)))
+				{
+					reconsider = true;
+					TREE_CHAIN (t) = TREE_CHAIN (next);
+				}
+				else
+					t = next;
+				
+				next = TREE_CHAIN (t);
+			}
+		}
+		
+		/* Write out needed type info variables.  We have to be careful
+		 looping through unemitted decls, because emit_tinfo_decl may
+		 cause other variables to be needed. New elements will be
+		 appended, and we remove from the vector those that actually
+		 get emitted.  */
+		for (i = VEC_length (tree, unemitted_tinfo_decls);
+			 VEC_iterate (tree, unemitted_tinfo_decls, --i, t);)
+			if (emit_tinfo_decl (t))
+			{
+				reconsider = true;
+				VEC_unordered_remove (tree, unemitted_tinfo_decls, i);
+			}
+		
+		/* The list of objects with static storage duration is built up
+		 in reverse order.  We clear STATIC_AGGREGATES so that any new
+		 aggregates added during the initialization of these will be
+		 initialized in the correct order when we next come around the
+		 loop.  */
+		vars = prune_vars_needing_no_initialization (&static_aggregates);
+		
+		if (vars)
+		{
+			/* We need to start a new initialization function each time
+			 through the loop.  That's because we need to know which
+			 vtables have been referenced, and TREE_SYMBOL_REFERENCED
+			 isn't computed until a function is finished, and written
+			 out.  That's a deficiency in the back-end.  When this is
+			 fixed, these initialization functions could all become
+			 inline, with resulting performance improvements.  */
+			tree ssdf_body;
+			
+			/* Set the line and file, so that it is obviously not from
+			 the source file.  */
+			/* APPLE LOCAL radar 4721858 */
+			input_location = *locusp;
+			ssdf_body = start_static_storage_duration_function (ssdf_count);
+			
+			/* Make sure the back end knows about all the variables.  */
+			write_out_vars (vars);
+			
+			/* First generate code to do all the initializations.  */
+			if (vars)
+				do_static_initialization_or_destruction (vars, /*initp=*/true);
+			
+			/* Then, generate code to do all the destructions.  Do these
+			 in reverse order so that the most recently constructed
+			 variable is the first destroyed.  If we're using
+			 __cxa_atexit, then we don't need to do this; functions
+			 were registered at initialization time to destroy the
+			 local statics.  */
+			if (!flag_use_cxa_atexit && vars)
+			{
+				vars = nreverse (vars);
+				do_static_initialization_or_destruction (vars, /*initp=*/false);
+			}
+			else
+				vars = NULL_TREE;
+			
+			/* Finish up the static storage duration function for this
+			 round.  */
+			/* APPLE LOCAL radar 4721858 */
+			input_location = *locusp;
+			finish_static_storage_duration_function (ssdf_body);
+			
+			/* All those initializations and finalizations might cause
+			 us to need more inline functions, more template
+			 instantiations, etc.  */
+			reconsider = true;
+			ssdf_count++;
+#ifdef USE_MAPPED_LOCATION
+			/* ??? */
+#else
+			/* APPLE LOCAL radar 4721858 */
+			locusp->line++;
+#endif
+		}
+		
+		/* Go through the set of inline functions whose bodies have not
+		 been emitted yet.  If out-of-line copies of these functions
+		 are required, emit them.  */
+		for (i = 0; VEC_iterate (tree, deferred_fns, i, decl); ++i)
+		{
+			/* Does it need synthesizing?  */
+			if (DECL_ARTIFICIAL (decl) && ! DECL_INITIAL (decl)
+				&& (! DECL_REALLY_EXTERN (decl) || DECL_INLINE (decl)))
+			{
+				/* Even though we're already at the top-level, we push
+				 there again.  That way, when we pop back a few lines
+				 hence, all of our state is restored.  Otherwise,
+				 finish_function doesn't clean things up, and we end
+				 up with CURRENT_FUNCTION_DECL set.  */
+				push_to_top_level ();
+				/* The decl's location will mark where it was first
+				 needed.  Save that so synthesize method can indicate
+				 where it was needed from, in case of error  */
+				input_location = DECL_SOURCE_LOCATION (decl);
+				synthesize_method (decl);
+				pop_from_top_level ();
+				reconsider = true;
+			}
+			
+			if (!DECL_SAVED_TREE (decl))
+				continue;
+			
+			/* We lie to the back-end, pretending that some functions
+			 are not defined when they really are.  This keeps these
+			 functions from being put out unnecessarily.  But, we must
+			 stop lying when the functions are referenced, or if they
+			 are not comdat since they need to be put out now.  If
+			 DECL_INTERFACE_KNOWN, then we have already set
+			 DECL_EXTERNAL appropriately, so there's no need to check
+			 again, and we do not want to clear DECL_EXTERNAL if a
+			 previous call to import_export_decl set it.
+			 
+			 This is done in a separate for cycle, because if some
+			 deferred function is contained in another deferred
+			 function later in deferred_fns varray,
+			 rest_of_compilation would skip this function and we
+			 really cannot expand the same function twice.  */
+			import_export_decl (decl);
+			if (DECL_NOT_REALLY_EXTERN (decl)
+				&& DECL_INITIAL (decl)
+				&& decl_needed_p (decl))
+				DECL_EXTERNAL (decl) = 0;
+			
+			/* If we're going to need to write this function out, and
+			 there's already a body for it, create RTL for it now.
+			 (There might be no body if this is a method we haven't
+			 gotten around to synthesizing yet.)  */
+			if (!DECL_EXTERNAL (decl)
+				&& decl_needed_p (decl)
+				&& !TREE_ASM_WRITTEN (decl)
+				&& !cgraph_node (decl)->local.finalized)
+			{
+				/* We will output the function; no longer consider it in this
+				 loop.  */
+				DECL_DEFER_OUTPUT (decl) = 0;
+				/* Generate RTL for this function now that we know we
+				 need it.  */
+				expand_or_defer_fn (decl);
+				/* If we're compiling -fsyntax-only pretend that this
+				 function has been written out so that we don't try to
+				 expand it again.  */
+				if (flag_syntax_only)
+					TREE_ASM_WRITTEN (decl) = 1;
+				reconsider = true;
+			}
+		}
+		
+		if (walk_namespaces (wrapup_globals_for_namespace, /*data=*/0))
+			reconsider = true;
+		
+		/* Static data members are just like namespace-scope globals.  */
+		for (i = 0; VEC_iterate (tree, pending_statics, i, decl); ++i)
+		{
+			if (var_finalized_p (decl) || DECL_REALLY_EXTERN (decl))
+				continue;
+			import_export_decl (decl);
+			/* If this static data member is needed, provide it to the
+			 back end.  */
+			if (DECL_NOT_REALLY_EXTERN (decl) && decl_needed_p (decl))
+				DECL_EXTERNAL (decl) = 0;
+			/* APPLE LOCAL begin  write used class statics  20020226 --turly  */
+#ifdef MACHOPIC_VAR_REFERRED_TO_P
+			else
+				if (TREE_USED (decl) && DECL_INITIAL (decl) != 0
+					&& DECL_INITIAL (decl) != error_mark_node
+					&& TREE_CODE (DECL_INITIAL (decl)) != CONSTRUCTOR
+					&& DECL_EXTERNAL (decl)
+					&& MACHOPIC_VAR_REFERRED_TO_P (IDENTIFIER_POINTER (
+																	   DECL_ASSEMBLER_NAME (decl))))
+				{
+					/* Force a local copy of this decl to be written.  */
+					DECL_EXTERNAL (decl) = 0;
+					TREE_PUBLIC (decl) = 0;
+				}
+#endif
+			/* APPLE LOCAL end  write used class statics  20020226 --turly  */
+		}
+		if (VEC_length (tree, pending_statics) != 0
+			&& wrapup_global_declarations (VEC_address (tree, pending_statics),
+										   VEC_length (tree, pending_statics)))
+			reconsider = true;
+		
+		retries++;
+    }
+	while (reconsider);
+	/* APPLE LOCAL begin radar 4721858 */
 }
 
 /* FN is an OFFSET_REF, DOTSTAR_EXPR or MEMBER_REF indicating the

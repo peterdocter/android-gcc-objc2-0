@@ -178,6 +178,13 @@ do_get_exception_ptr (void)
 					     NULL_TREE));
 }
 
+/* APPLE LOCAL begin radar 2848255 */
+tree objcp_build_eh_type_type (tree type)
+{
+	return build_eh_type_type (type);
+}
+/* APPLE LOCAL end radar 2848255 */
+
 /* Build up a call to __cxa_begin_catch, to tell the runtime that the
    exception has been handled.  */
 

@@ -595,6 +595,32 @@ cp_convert (tree type, tree expr)
   return ocp_convert (type, expr, CONV_OLD_CONVERT, LOOKUP_NORMAL);
 }
 
+/* APPLE LOCAL begin mainline */
+/* C++ equivalent of convert_and_check but using cp_convert as the
+ conversion function.
+ 
+ Convert EXPR to TYPE, warning about conversion problems with constants.
+ Invoke this function on every expression that is converted implicitly,
+ i.e. because of language rules and not because of an explicit cast.  */
+
+tree
+cp_convert_and_check (tree type, tree expr)
+{
+	tree result;
+	
+	if (TREE_TYPE (expr) == type)
+		return expr;
+	
+	result = cp_convert (type, expr);
+	
+	if (!skip_evaluation && !TREE_OVERFLOW_P (expr) && result != error_mark_node)
+		warnings_for_convert_and_check (type, expr, result);
+	
+	return result;
+}
+
+/* APPLE LOCAL end mainline */
+
 /* Conversion...
 
    FLAGS indicates how we should behave.  */

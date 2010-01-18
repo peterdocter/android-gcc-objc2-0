@@ -8583,33 +8583,42 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl,
 	return decl;
       }
 
-    case FOR_STMT:
-      stmt = begin_for_stmt ();
-			  RECUR (FOR_INIT_STMT (t));
-      finish_for_init_stmt (stmt);
-      tmp = RECUR (FOR_COND (t));
-      finish_for_cond (tmp, stmt);
-      tmp = RECUR (FOR_EXPR (t));
-      finish_for_expr (tmp, stmt);
-      RECUR (FOR_BODY (t));
-      finish_for_stmt (stmt);
-      break;
-
-    case WHILE_STMT:
-      stmt = begin_while_stmt ();
-      tmp = RECUR (WHILE_COND (t));
-      finish_while_stmt_cond (tmp, stmt);
-      RECUR (WHILE_BODY (t));
-      finish_while_stmt (stmt);
-      break;
-
-    case DO_STMT:
-      stmt = begin_do_stmt ();
-      RECUR (DO_BODY (t));
-      finish_do_body (stmt);
-      tmp = RECUR (DO_COND (t));
-      finish_do_stmt (tmp, stmt);
-      break;
+		case FOR_STMT:
+			/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+			tmp = RECUR (FOR_ATTRIBUTES (t));
+			stmt = begin_for_stmt (tmp);
+			RECUR (FOR_INIT_STMT (t));
+			/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
+			finish_for_init_stmt (stmt);
+			tmp = RECUR (FOR_COND (t));
+			finish_for_cond (tmp, stmt);
+			tmp = RECUR (FOR_EXPR (t));
+			finish_for_expr (tmp, stmt);
+			RECUR (FOR_BODY (t));
+			finish_for_stmt (stmt);
+			break;
+			
+		case WHILE_STMT:
+			/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+			tmp = RECUR (WHILE_ATTRIBUTES (t));
+			stmt = begin_while_stmt (tmp);
+			/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
+			tmp = RECUR (WHILE_COND (t));
+			finish_while_stmt_cond (tmp, stmt);
+			RECUR (WHILE_BODY (t));
+			finish_while_stmt (stmt);
+			break;
+			
+		case DO_STMT:
+			/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+			tmp = RECUR (DO_ATTRIBUTES (t));
+			stmt = begin_do_stmt (tmp);
+			/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
+			RECUR (DO_BODY (t));
+			finish_do_body (stmt);
+			tmp = RECUR (DO_COND (t));
+			finish_do_stmt (tmp, stmt);
+			break;
 
     case IF_STMT:
       stmt = begin_if_stmt ();

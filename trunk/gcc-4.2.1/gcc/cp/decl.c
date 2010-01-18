@@ -52,7 +52,8 @@ Boston, MA 02110-1301, USA.  */
 #include "timevar.h"
 #include "tree-flow.h"
 
-static tree grokparms (cp_parameter_declarator *, tree *);
+/* APPLE LOCAL blocks 6040305 (ce) */
+tree grokparms (cp_parameter_declarator *, tree *);
 static const char *redeclaration_error_message (tree, tree);
 
 static int decl_jump_unsafe (tree);
@@ -3789,7 +3790,26 @@ shadow_tag (cp_decl_specifier_seq *declspecs)
 
   return t;
 }
-
+
+/* APPLE LOCAL begin blocks 6339747 */
+/* Decode a block literal type, such as "int **", returning a ...FUNCTION_DECL node.  */
+
+tree
+grokblockdecl (cp_decl_specifier_seq *type_specifiers,
+			   const cp_declarator *declarator)
+{
+	tree decl;
+	tree attrs = type_specifiers->attributes;
+	
+	type_specifiers->attributes = NULL_TREE;
+	
+	decl = grokdeclarator (declarator, type_specifiers, BLOCKDEF, 0, &attrs);
+	if (attrs)
+		cplus_decl_attributes (&decl, attrs, 0);
+	return decl;
+}
+/* APPLE LOCAL end blocks 6339747 */
+
 /* Decode a "typename", such as "int **", returning a ..._TYPE node.  */
 
 tree
@@ -8915,7 +8935,8 @@ check_default_argument (tree decl, tree arg)
 
    *PARMS is set to the chain of PARM_DECLs created.  */
 
-static tree
+/* APPLE LOCAL blocks 6040305 (ce) */
+tree
 grokparms (cp_parameter_declarator *first_parm, tree *parms)
 {
   tree result = NULL_TREE;
