@@ -7179,6 +7179,541 @@ make_pointer_declarator (struct c_declspecs *type_quals_attrs,
   return ret;
 }
 
+/* APPLE LOCAL begin radar 5932809 - copyable byref blocks (C++ ch) */
+/* build_byref_local_var_access - converts EXPR to:
+ EXPR.__forwarding-><decl-name>.
+ */
+tree
+build_byref_local_var_access (tree expr, tree decl_name)
+{
+	tree exp = build_component_ref (expr, get_identifier ("__forwarding"));
+	exp = build_indirect_ref (exp, "unary *");
+	exp = build_component_ref (exp, decl_name);
+	return exp;
+}
+/* APPLE LOCAL end radar 5932809 - copyable byref blocks (C++ ch) */
+/* APPLE LOCAL begin radar 5732232 - blocks (C++ ch) */
+/**
+ build_block_byref_decl - This routine inserts a variable declared as a
+ 'byref' variable using the |...| syntax in helper function's outer-most scope.
+ */
+tree
+build_block_byref_decl (tree name, tree decl, tree exp)
+{
+	struct c_scope *scope = current_scope;
+	tree ptr_type, byref_decl;
+	/* APPLE LOCAL begin radar 6225809 */
+	if (cur_block->prev_block_info) {
+		/* Traverse enclosing blocks. Insert a __block variable in
+		 each enclosing block which has no declaration of this
+		 variable. This is to ensure that the current (inner) block
+		 gets the __block version of the variable; */
+		struct block_sema_info *cb = cur_block->prev_block_info;
+		while (cb) {
+			struct c_binding *b = I_SYMBOL_BINDING (name);
+			/* Find the first declaration not in current block. */
+			while (b && b->decl
+				   && (TREE_CODE (b->decl) == VAR_DECL
+					   || TREE_CODE (b->decl) == PARM_DECL)
+				   && b->depth >= cur_block->the_scope->depth)
+				b = b->shadowed;
+			
+			/* Is the next declaration not in enclosing block? */
+			if (b && b->decl
+				&& (TREE_CODE (b->decl) == VAR_DECL
+					|| TREE_CODE (b->decl) == PARM_DECL)
+				&& b->depth < cb->the_scope->depth) {
+				/* No declaration of variable seen in the block. Must insert one. */
+				struct c_scope *save_scope = current_scope;
+				struct block_sema_info *save_current_block = cur_block;
+				current_scope = cb->the_scope;
+				cur_block = cb;
+				decl = build_block_byref_decl (name, decl, exp);
+				cur_block = save_current_block;
+				current_scope = save_scope;
+			}
+			cb = cb->prev_block_info;
+		}
+	}
+	/* APPLE LOCAL end radar 6225809 */
+	
+	/* If it is already a byref declaration, do not add the pointer type
+     because such declarations already have the pointer type
+     added. This happens when we have two nested byref declarations in
+     nested blocks. */
+	ptr_type = (TREE_CODE (decl) == VAR_DECL && BLOCK_DECL_BYREF (decl))
+	? TREE_TYPE (decl) : build_pointer_type (TREE_TYPE (decl));
+	byref_decl = build_decl (VAR_DECL, name, ptr_type);
+	/* APPLE LOCAL begin radars 6144664 & 6145471  */
+	DECL_SOURCE_LOCATION (byref_decl) = DECL_SOURCE_LOCATION 
+	(cur_block->helper_func_decl);
+	/* APPLE LOCAL end radars 6144664 & 6145471  */
+	BLOCK_DECL_BYREF (byref_decl) = 1;
+	
+	/* APPLE LOCAL begin radar 5932809 - copyable byref blocks (C++ ch) */
+	if (TREE_CODE (decl) == VAR_DECL && COPYABLE_BYREF_LOCAL_VAR (decl))
+    {
+		COPYABLE_BYREF_LOCAL_VAR (byref_decl) = 1;
+		COPYABLE_BYREF_LOCAL_NONPOD (byref_decl) = COPYABLE_BYREF_LOCAL_NONPOD (decl);
+		/* APPLE LOCAL radar 5847976 */
+		COPYABLE_WEAK_BLOCK (byref_decl) = COPYABLE_WEAK_BLOCK (decl);
+    }
+	/* APPLE LOCAL end radar 5932809 - copyable byref blocks (C++ ch) */
+	
+	/* In the presence of nested "{" 
+     move up the scope chain until reaching the main function body's scope.
+	 */
+	while (scope && !scope->function_body)
+		scope = scope->outer;
+	/* Current scope must be that of the main function body. */
+	gcc_assert (scope && scope->function_body);
+	bind (name, byref_decl,
+		  scope, /*invisible=*/false, /*nested=*/false);
+	cur_block->block_byref_decl_list =
+    tree_cons (NULL_TREE, byref_decl, cur_block->block_byref_decl_list);
+	/* APPLE LOCAL radar 5847213 - building block_original_byref_decl_list list removed. */
+	/* APPLE LOCAL begin radar 6289031 */
+	if (! flag_objc_gc_only)
+		push_cleanup (byref_decl, build_block_byref_release_exp (byref_decl), false);
+	/* APPLE LOCAL end radar 6289031 */
+	
+	return byref_decl;
+}
+
+/**
+ build_block_ref_decl - This routine inserts a copied-in variable (a variable
+ referenced in the block but whose scope is outside the block) in helper
+ function's outer-most scope. It also sets its type to 'const' as such
+ variables are read-only.
+ */
+tree
+build_block_ref_decl (tree name, tree decl)
+{
+	struct c_scope *scope = current_scope;
+	tree ref_decl;
+	/* APPLE LOCAL radar 6212722 */
+	tree type, exp;
+	/* APPLE LOCAL begin radar 5932809 - copyable byref blocks (C++ ch) */
+	/* 'decl' was previously declared as __block. Simply, copy the value
+     embedded in the above variable. */
+	if (TREE_CODE (decl) == VAR_DECL && COPYABLE_BYREF_LOCAL_VAR (decl))
+		decl = build_byref_local_var_access (decl, DECL_NAME (decl));
+	else {
+		/* APPLE LOCAL begin radar 5988451 (C++ ch) */
+		if (cur_block->prev_block_info) {
+			/* Traverse enclosing blocks. Insert a copied-in variable in
+			 each enclosing block which has no declaration of this
+			 variable. This is to ensure that the current (inner) block
+			 has the 'frozen' value of the copied-in variable; which means
+			 the value of the copied in variable is at the point of the
+			 block declaration and *not* when the inner block is
+			 invoked.  */
+			struct block_sema_info *cb = cur_block->prev_block_info;
+			while (cb) {
+				struct c_binding *b = I_SYMBOL_BINDING (name);
+				/* Find the first declaration not in current block. */
+				while (b && b->decl
+					   && (TREE_CODE (b->decl) == VAR_DECL
+						   || TREE_CODE (b->decl) == PARM_DECL)
+					   && b->depth >= cur_block->the_scope->depth)
+					b = b->shadowed;
+				
+				/* Is the next declaration not in enclosing block? */
+				if (b && b->decl
+					&& (TREE_CODE (b->decl) == VAR_DECL
+						|| TREE_CODE (b->decl) == PARM_DECL)
+					&& b->depth < cb->the_scope->depth) {
+					/* No declaration of variable seen in the block. Must insert one,
+					 so it 'freezes' the variable in this block. */
+					struct c_scope *save_scope = current_scope;
+					struct block_sema_info *save_current_block = cur_block;
+					current_scope = cb->the_scope;
+					cur_block = cb;
+					decl = build_block_ref_decl (name, decl);
+					cur_block = save_current_block;
+					current_scope = save_scope;
+				}
+				cb = cb->prev_block_info;
+			}
+		}
+		/* APPLE LOCAL end radar 5988451 (C++ ch) */
+	}
+	/* APPLE LOCAL end radar 5932809 - copyable byref blocks (C++ ch) */
+	/* APPLE LOCAL begin radar 6212722 */
+	exp = decl;
+	type = TREE_TYPE (exp);
+	if (TREE_CODE (type) == ARRAY_TYPE) {
+		exp = array_to_pointer_conversion (decl);
+		type = TREE_TYPE (exp);
+	}
+	else if (TREE_CODE (type) == FUNCTION_TYPE) {
+		exp = function_to_pointer_conversion (exp);
+		type = TREE_TYPE (exp);
+	}
+	ref_decl = build_decl (VAR_DECL, name,
+						   build_qualified_type (type, TYPE_QUAL_CONST));
+	/* APPLE LOCAL end radar 6212722 */
+	/* APPLE LOCAL begin radars 6144664 & 6145471  */
+	DECL_SOURCE_LOCATION (ref_decl) = DECL_SOURCE_LOCATION 
+	(cur_block->helper_func_decl);
+	/* APPLE LOCAL end radars 6144664 & 6145471  */
+	DECL_INITIAL (ref_decl) = error_mark_node;
+	/* APPLE LOCAL radar 5805175 - blocks (C++ ch) */
+	c_apply_type_quals_to_decl (TYPE_QUAL_CONST, ref_decl);
+	BLOCK_DECL_COPIED (ref_decl) = 1;
+	
+	/* Find the scope for function body (outer-most scope) and insert
+     this variable in that scope. This is to avoid duplicate
+     declaration of the save variable. */
+	while (scope && !scope->function_body)
+		scope = scope->outer;
+	/* We are enterring the copied-in variable in helper function's
+     outer scope; that of its main body. */
+	gcc_assert (scope);
+	bind (name, ref_decl,
+		  scope, /*invisible=*/false, /*nested=*/false);
+	cur_block->block_ref_decl_list =
+    tree_cons (NULL_TREE, ref_decl, cur_block->block_ref_decl_list);
+	cur_block->block_original_ref_decl_list =
+    /* APPLE LOCAL radar 6212722 */
+    tree_cons (NULL_TREE, exp, cur_block->block_original_ref_decl_list);
+	return ref_decl;
+}
+
+/* APPLE LOCAL begin radar 5847213 - radar 6329245 */
+static GTY (())  tree descriptor_ptr_type;
+static GTY (())  tree descriptor_ptr_type_with_copydispose;
+/** build_block_descriptor_type - This routine builds following internal type:
+ struct __block_descriptor {
+ unsigned long int reserved;     // NULL
+ unsigned long int Size;  // sizeof(struct Block_literal_1)
+ 
+ // optional helper functions
+ void *CopyFuncPtr; // When BLOCK_HAS_COPY_DISPOSE is set (withCopyDispose true)
+ void *DestroyFuncPtr; // When BLOCK_HAS_COPY_DISPOSE is set (withCopyDispose true)
+ } *descriptor_ptr_type;
+ 
+ Objects of this type will always be static. This is one main component of abi change.
+ */
+tree
+build_block_descriptor_type (bool withCopyDispose)
+{
+	tree field_decl_chain, field_decl;
+	tree main_type;
+	
+	if (withCopyDispose && descriptor_ptr_type_with_copydispose)
+		return descriptor_ptr_type_with_copydispose;
+	if (!withCopyDispose && descriptor_ptr_type)
+		return descriptor_ptr_type;
+	
+	main_type = 
+    withCopyDispose ? 
+	start_struct (RECORD_TYPE, get_identifier ("__block_descriptor_withcopydispose"))
+	: start_struct (RECORD_TYPE, get_identifier ("__block_descriptor"));
+	
+	/* unsigned long int reserved; */
+	field_decl = build_decl (FIELD_DECL, get_identifier ("reserved"), long_unsigned_type_node);
+	field_decl_chain = field_decl;
+	
+	/* unsigned long int Size; */
+	field_decl = build_decl (FIELD_DECL, get_identifier ("Size"), long_unsigned_type_node);
+	chainon (field_decl_chain, field_decl);
+	
+	if (withCopyDispose)
+	{
+		/* void *CopyFuncPtr; */
+		field_decl = build_decl (FIELD_DECL, get_identifier ("CopyFuncPtr"), ptr_type_node);
+		chainon (field_decl_chain, field_decl);
+		/* void *DestroyFuncPtr; */
+		field_decl = build_decl (FIELD_DECL, get_identifier ("DestroyFuncPtr"), ptr_type_node);
+		chainon (field_decl_chain, field_decl);
+	}
+	
+	/* Mark this struct as being a block struct rather than a 'normal'
+	 struct.  */
+	TYPE_BLOCK_IMPL_STRUCT (main_type) = 1;
+	finish_struct (main_type, field_decl_chain, NULL_TREE);
+	
+	main_type = build_pointer_type (main_type);
+	if (withCopyDispose)
+		descriptor_ptr_type_with_copydispose = main_type;
+	else
+		descriptor_ptr_type = main_type;
+	return main_type;
+}
+/* APPLE LOCAL end radar 5847213 - radar 6329245 */
+
+/* APPLE LOCAL begin radar 5814025 (C++ ch) */
+struct c_declarator *
+make_block_pointer_declarator (struct c_declspecs *type_quals_attrs,
+							   struct c_declarator *target)
+{
+	int quals = 0;
+	struct c_declarator *itarget = target;
+	struct c_declarator *ret = XOBNEW (&parser_obstack, struct c_declarator);
+	
+	if (type_quals_attrs)
+	{
+		tree attrs = type_quals_attrs->attrs;
+		quals = quals_from_declspecs (type_quals_attrs);
+		if (attrs != NULL_TREE)
+			itarget = build_attrs_declarator (attrs, target);
+	}
+	ret->kind = cdk_block_pointer;
+	/* APPLE LOCAL radar 5882266 (C++ ch) */
+	ret->declarator = itarget;
+	ret->u.pointer_quals = quals;
+	return ret;
+}
+/* APPLE LOCAL end radar 5814025 (C++ ch) */
+
+tree
+begin_block (void)
+{
+	struct block_sema_info *csi;
+#if 0
+	push_scope ();
+#endif
+	csi = (struct block_sema_info*)xcalloc (1, sizeof (struct block_sema_info));
+	csi->prev_block_info = cur_block;
+	cur_block = csi;
+	return NULL_TREE;
+}
+
+struct block_sema_info *
+finish_block (tree block __attribute__ ((__unused__)))
+{
+	struct block_sema_info *csi = cur_block;
+	cur_block = cur_block->prev_block_info;
+#if 0
+	pop_scope ();
+#endif
+	return csi;
+}
+
+bool
+in_imm_block (void)
+{
+	/* APPLE LOCAL radar 5988451 (C++ ch) */
+	return (cur_block && cur_block->the_scope == current_scope);
+}
+
+/* This routine returns 'true' if 'name' has a declaration inside the
+ current block, 'false' otherwise.  If 'name' has no declaration in
+ the current block, it returns in DECL the user declaration for
+ 'name' found in the enclosing scope.  Note that if it is declared
+ in current declaration, it can be either a user declaration or a
+ byref/copied-in declaration added in current block's scope by the
+ compiler.  */
+bool
+lookup_name_in_block (tree name, tree *decl)
+{
+	if (cur_block)
+    {
+		struct c_binding *b = I_SYMBOL_BINDING (name);
+		if (b->depth >= cur_block->the_scope->depth)
+			return true;
+		
+		/* Check for common case of block nested inside a non-block. */
+		if (!cur_block->prev_block_info)
+			return false;
+		/* Check for less common case of nested blocks. */
+		/* Declaration not in current block. Find the first user
+		 declaration of 'name' in outer scope. */
+		/* APPLE LOCAL begin radar 5988451 (C++ ch) */
+		/* Check for variables only, as we may have parameters, such as
+		 'self' */
+		/* Note that if a copied-in variable (BLOCK_DECL_COPIED) in the
+         enclosing block is found, it must be returned as this is
+         where the variable in current (nested block) will have to get
+         its value. */
+		while (b && b->decl
+			   && (TREE_CODE (b->decl) == VAR_DECL)
+			   && BLOCK_DECL_BYREF (b->decl))
+			b = b->shadowed;
+		/* APPLE LOCAL end radar 5988451 (C++ ch) */
+		if (b && b->decl)
+			*decl = b->decl;
+    }
+	return false;
+}
+
+static struct c_scope *save_current_scope;
+static tree save_current_function_decl;
+void
+push_to_top_level (void)
+{
+	save_current_scope = current_scope;
+	save_current_function_decl = current_function_decl;
+	current_scope = file_scope;
+	current_function_decl = NULL_TREE;
+}
+
+void
+pop_from_top_level (void)
+{
+	current_scope = save_current_scope;
+	current_function_decl = save_current_function_decl;
+}
+
+/**
+ build_helper_func_decl - This routine builds a FUNCTION_DECL for
+ a block helper function.
+ */
+tree
+build_helper_func_decl (tree ident, tree type)
+{
+	tree func_decl = build_decl (FUNCTION_DECL, ident, type);
+	DECL_EXTERNAL (func_decl) = 0;
+	TREE_PUBLIC (func_decl) = 0;
+	TREE_USED (func_decl) = 1;
+	TREE_NOTHROW (func_decl) = 0;
+	/* APPLE LOCAL radar 6172148 */
+	BLOCK_SYNTHESIZED_FUNC (func_decl) = 1;
+	return func_decl;
+}
+
+/**
+ start_block_helper_function - This is a light-weight version of start_function().
+ It has removed all the fuss in the start_function().
+ */
+void
+start_block_helper_function (tree decl1)
+{
+	struct c_label_context_se *nstack_se;
+	struct c_label_context_vm *nstack_vm;
+	tree restype, resdecl;
+	
+	current_function_returns_value = 0;  /* Assume, until we see it does.  */
+	current_function_returns_null = 0;
+	current_function_returns_abnormally = 0;
+	warn_about_return_type = 0;
+	c_switch_stack = NULL;
+	
+	nstack_se = XOBNEW (&parser_obstack, struct c_label_context_se);
+	nstack_se->labels_def = NULL;
+	nstack_se->labels_used = NULL;
+	nstack_se->next = label_context_stack_se;
+	label_context_stack_se = nstack_se;
+	
+	nstack_vm = XOBNEW (&parser_obstack, struct c_label_context_vm);
+	nstack_vm->labels_def = NULL;
+	nstack_vm->labels_used = NULL;
+	nstack_vm->scope = 0;
+	nstack_vm->next = label_context_stack_vm;
+	label_context_stack_vm = nstack_vm;
+	
+	/* Indicate no valid break/continue context by setting these variables
+	 to some non-null, non-label value.  We'll notice and emit the proper
+	 error message in c_finish_bc_stmt.  */
+	c_break_label = c_cont_label = size_zero_node;
+	
+	announce_function (decl1);
+	
+	/* Make the init_value nonzero so pushdecl knows this is not tentative.
+	 error_mark_node is replaced below (in pop_scope) with the BLOCK.  */
+	DECL_INITIAL (decl1) = error_mark_node;
+	
+	current_function_prototype_locus = UNKNOWN_LOCATION;
+	current_function_prototype_built_in = false;
+	current_function_prototype_arg_types = NULL_TREE;
+	
+	/* This function exists in static storage.
+	 (This does not mean `static' in the C sense!)  */
+	TREE_STATIC (decl1) = 1;
+	/* A helper function is not global */
+	TREE_PUBLIC (decl1) = 0;
+	
+	/* This is the earliest point at which we might know the assembler
+	 name of the function.  Thus, if it's set before this, die horribly.  */
+	gcc_assert (!DECL_ASSEMBLER_NAME_SET_P (decl1));
+	current_function_decl = pushdecl (decl1);
+	
+	/* APPLE LOCAL begin optimization pragmas 3124235/3420242 (C++ ch) */
+	/* Build a mapping between this decl and the per-function options in
+	 effect at this point.  */
+	
+	/* record_func_cl_pf_opts_mapping (current_function_decl); */
+	/* APPLE LOCAL end optimization pragmas 3124235/3420242 (C++ ch) */
+	
+	push_scope ();
+	declare_parm_level ();
+	
+	restype = TREE_TYPE (TREE_TYPE (current_function_decl));
+	resdecl = build_decl (RESULT_DECL, NULL_TREE, restype);
+	DECL_ARTIFICIAL (resdecl) = 1;
+	DECL_IGNORED_P (resdecl) = 1;
+	DECL_RESULT (current_function_decl) = resdecl;
+	
+	start_fname_decls ();
+}
+
+/**
+ declare_block_prologue_local_vars - utility routine to do the actual
+ declaration and initialization for each referecned block variable.
+ */
+static void
+declare_block_prologue_local_vars (tree self_parm, tree component,
+								   tree stmt)
+{
+	tree decl, block_component;
+	tree_stmt_iterator i;
+	tree decl_stmt;
+	
+	decl = component;
+	block_component = build_component_ref (build_indirect_ref (self_parm, "->"),
+										   DECL_NAME (component));
+	gcc_assert (block_component);
+	DECL_EXTERNAL (decl) = 0;
+	TREE_STATIC (decl) = 0;
+	TREE_USED (decl) = 1;
+	DECL_CONTEXT (decl) = current_function_decl;
+	DECL_ARTIFICIAL (decl) = 1;
+	DECL_INITIAL (decl) = block_component;
+	/* Prepend a DECL_EXPR statement to the statement list. */
+	i = tsi_start (stmt);
+	decl_stmt = build_stmt (DECL_EXPR, decl);
+	/* APPLE LOCAL Radar 5811961, Fix location of block prologue vars (C++ ch) */
+	SET_EXPR_LOCATION (decl_stmt, DECL_SOURCE_LOCATION (decl));
+	/* APPLE LOCAL begin radar 6163705, Blocks prologues  */
+	/* Give the prologue statements a line number of one before the beginning of
+     the function, to make them easily identifiable later.  */
+	EXPR_LINENO (decl_stmt) =  DECL_SOURCE_LINE (decl) - 1;
+	/* APPLE LOCAL end radar 6163705, Blocks prologues  */
+	tsi_link_before (&i, decl_stmt, TSI_SAME_STMT);
+}
+
+/**
+ block_build_prologue
+ - This routine builds the declarations for the
+ variables referenced in the block; as in:
+ int *y = .block_descriptor->y;
+ int x = .block_descriptor->x;
+ 
+ The decl_expr declaration for each initialization is enterred at the
+ beginning of the helper function's statement-list which is passed
+ in block_impl->block_body.
+ */
+void
+block_build_prologue (struct block_sema_info *block_impl)
+{
+	tree chain;
+	/* APPLE LOCAL radar 6404979 */
+	tree self_parm = lookup_name (get_identifier (".block_descriptor"));
+	gcc_assert (self_parm);
+	
+	for (chain = block_impl->block_ref_decl_list; chain;
+		 chain = TREE_CHAIN (chain))
+		declare_block_prologue_local_vars (self_parm, TREE_VALUE (chain),
+										   block_impl->block_body);
+	
+	for (chain = block_impl->block_byref_decl_list; chain;
+		 chain = TREE_CHAIN (chain))
+		declare_block_prologue_local_vars (self_parm, TREE_VALUE (chain),
+										   block_impl->block_body);
+}
+/* APPLE LOCAL end radar 5732232 - blocks (C++ ch) */
+
 /* Return a pointer to a structure for an empty list of declaration
    specifiers.  */
 
@@ -8008,5 +8543,36 @@ c_write_global_declarations (void)
 
   ext_block = NULL;
 }
+
+/* APPLE LOCAL begin radar 5741070  */
+
+/* Given an IDENTIFIER tree for a class interface, find (if possible) and
+ return the record type for the class interface.  */
+
+tree
+c_return_interface_record_type (tree typename)
+{
+	enum tree_code_class class;
+	enum tree_code code;
+	tree retval = NULL;
+	
+	if (typename == NULL)
+		return retval;
+	
+	code = TREE_CODE (typename);
+	class = TREE_CODE_CLASS (code);
+	
+	if (code != IDENTIFIER_NODE
+		|| class != tcc_exceptional)
+		return retval;
+	
+	retval = I_TAG_DECL (typename);
+	
+	if (TREE_CODE (retval) != RECORD_TYPE)
+		retval = NULL;
+	
+	return retval;
+}
+/* APPLE LOCAL end radar 5741070  */
 
 #include "gt-c-decl.h"

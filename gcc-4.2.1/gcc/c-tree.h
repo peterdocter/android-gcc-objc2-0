@@ -286,16 +286,18 @@ struct c_declspecs {
 
 /* The various kinds of declarators in C.  */
 enum c_declarator_kind {
-  /* An identifier.  */
-  cdk_id,
-  /* A function.  */
-  cdk_function,
-  /* An array.  */
-  cdk_array,
-  /* A pointer.  */
-  cdk_pointer,
-  /* Parenthesized declarator with nested attributes.  */
-  cdk_attrs
+	/* An identifier.  */
+	cdk_id,
+	/* A function.  */
+	cdk_function,
+	/* An array.  */
+	cdk_array,
+	/* A pointer.  */
+	cdk_pointer,
+	/* APPLE LOCAL blocks (C++ ch) */
+	cdk_block_pointer,
+	/* Parenthesized declarator with nested attributes.  */
+	cdk_attrs
 };
 
 /* Information about the parameters in a function declarator.  */
@@ -574,7 +576,10 @@ extern int c_types_compatible_p (tree, tree);
 extern tree c_begin_compound_stmt (bool);
 extern tree c_end_compound_stmt (tree, bool);
 extern void c_finish_if_stmt (location_t, tree, tree, tree, bool);
-extern void c_finish_loop (location_t, tree, tree, tree, tree, tree, bool);
+/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+extern void c_finish_loop (location_t, tree, tree, tree, tree, tree, tree,
+						   bool);
+/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 extern tree c_begin_stmt_expr (void);
 extern tree c_finish_stmt_expr (tree);
 extern tree c_process_expr_stmt (tree);
@@ -621,6 +626,8 @@ extern bool c_eh_initialized_p;
 extern void c_finish_incomplete_decl (tree);
 extern void c_write_global_declarations (void);
 
+/* APPLE LOCAL radar 5741070  */
+extern tree c_return_interface_record_type (tree);
 /* In order for the format checking to accept the C frontend
    diagnostic framework extensions, you must include this file before
    toplev.h, not after.  */

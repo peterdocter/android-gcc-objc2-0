@@ -362,6 +362,16 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #define TARGET_RESOLVE_OVERLOADED_BUILTIN NULL
 #define TARGET_FOLD_BUILTIN hook_tree_tree_tree_bool_null
 
+/* APPLE LOCAL begin constant cfstrings */
+/* In c-common.c.  */
+#ifndef TARGET_EXPAND_TREE_BUILTIN
+#define TARGET_EXPAND_TREE_BUILTIN hook_tree_tree_tree_tree_null
+#endif
+#ifndef TARGET_CONSTRUCT_OBJC_STRING
+#define TARGET_CONSTRUCT_OBJC_STRING hook_tree_tree_null
+#endif
+/* APPLE LOCAL end constant cfstrings */
+
 /* In varasm.c.  */
 #ifndef TARGET_SECTION_TYPE_FLAGS
 #define TARGET_SECTION_TYPE_FLAGS default_section_type_flags
@@ -489,6 +499,8 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #define TARGET_STRUCT_VALUE_RTX hook_rtx_tree_int_null
 #define TARGET_RETURN_IN_MEMORY default_return_in_memory
 #define TARGET_RETURN_IN_MSB hook_bool_tree_false
+/* APPLE LOCAL radar 4781080 */
+#define TARGET_OBJC_FPRETURN_MSGCALL default_objc_fpreturn_msgcall
 
 #define TARGET_EXPAND_BUILTIN_SAVEREGS default_expand_builtin_saveregs
 #define TARGET_SETUP_INCOMING_VARARGS default_setup_incoming_varargs
@@ -516,6 +528,8 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
    TARGET_STRUCT_VALUE_RTX,					\
    TARGET_RETURN_IN_MEMORY,					\
    TARGET_RETURN_IN_MSB,					\
+   /* APPLE LOCAL radar 4781080 */				\
+   TARGET_OBJC_FPRETURN_MSGCALL,				\
    TARGET_PASS_BY_REFERENCE,					\
    TARGET_EXPAND_BUILTIN_SAVEREGS,				\
    TARGET_SETUP_INCOMING_VARARGS,				\
@@ -629,6 +643,10 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
   TARGET_NARROW_VOLATILE_BITFIELD,		\
   TARGET_INIT_BUILTINS,				\
   TARGET_EXPAND_BUILTIN,			\
+/* APPLE LOCAL begin constant cfstrings */	\
+TARGET_EXPAND_TREE_BUILTIN,			\
+TARGET_CONSTRUCT_OBJC_STRING,			\
+/* APPLE LOCAL end constant cfstrings */	\
   TARGET_RESOLVE_OVERLOADED_BUILTIN,		\
   TARGET_FOLD_BUILTIN,				\
   TARGET_MANGLE_FUNDAMENTAL_TYPE,		\

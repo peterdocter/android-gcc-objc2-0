@@ -436,6 +436,18 @@ struct gcc_target
   rtx (* expand_builtin) (tree exp, rtx target, rtx subtarget,
 			  enum machine_mode mode, int ignore);
 
+	/* APPLE LOCAL begin constant cfstrings */
+	/* Expand a platform-specific (but machine-independent) builtin.  */
+	tree (* expand_tree_builtin) (tree function, tree params,
+								  tree coerced_params);
+	
+	/* Construct a target-specific Objective-C string object based on the
+     STRING_CST passed in STR, or NULL if the default Objective-C objects
+     (based on NSConstantString or NXConstantString) should be used
+     instead.  */
+	tree (* construct_objc_string) (tree str);
+	/* APPLE LOCAL end constant cfstrings */
+	
   /* Select a replacement for a target-specific builtin.  This is done
      *before* regular type checking, and so allows the target to implement
      a crude form of function overloading.  The result is a complete
@@ -672,7 +684,9 @@ struct gcc_target
     rtx (*struct_value_rtx) (tree fndecl, int incoming);
     bool (*return_in_memory) (tree type, tree fndecl);
     bool (*return_in_msb) (tree type);
-
+	  /* APPLE LOCAL radar 4781080 */
+	  bool (*objc_fpreturn_msgcall) (tree type, bool no_long_double);
+	  
     /* Return true if a parameter must be passed by reference.  TYPE may
        be null if this is a libcall.  CA may be null if this query is
        from __builtin_va_arg.  */
