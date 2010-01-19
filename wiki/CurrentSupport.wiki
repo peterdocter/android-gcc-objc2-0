@@ -1,0 +1,25 @@
+#summary Current compiler support and issues.
+
+= Details =
+
+Properties:
+  * @property seems to work just fine
+  * nonatomic and atomic
+  * assign, copy, retain work (granted that requires a NSCopying protocol for copying)
+  * getter/setters have not been tested yet
+  * @synthesize works 
+  * @dynamic has not been tested (but should work since @synthesize does)
+
+Classes:
+  * @private works for ivars
+  * direct ivar access has not been tested (but it should work since its fairly similar to properties code wise in the compiler)
+
+Protocols:
+  * libobjc needs some overhauling to support protocols better (need to re-do libobjc to update to more apple-esque versions)
+  * the initial protocol concept works, however there is no identifier for class conformance to a given protocol (properly atleast)
+
+Blocks:
+  * Blocks have not been tested in c, c++, objc, or obj-c++ (not even sure they compile right yet)
+
+Fast enumeration (foreach/for-in):
+  * Not yet tested at all (also not sure if they compile yet)
