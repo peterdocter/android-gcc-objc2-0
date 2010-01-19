@@ -1,0 +1,10 @@
+#summary Patching NDK with ObjC 2.0 support
+
+= Introduction =
+
+This is a placeholder for a brief tutorial for patching and building the Android NDK with ObjC 2.0 support
+
+
+= Details =
+
+Coming soon...
