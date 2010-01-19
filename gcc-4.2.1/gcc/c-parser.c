@@ -638,6 +638,8 @@ c_token_starts_declspecs (c_token *token)
 		{
 			case RID_STATIC:
 			case RID_EXTERN:
+			/* APPLE LOCAL private extern 5487726 */
+			case RID_PRIVATE_EXTERN:
 			case RID_REGISTER:
 			case RID_TYPEDEF:
 			case RID_INLINE:
@@ -2463,6 +2465,20 @@ c_parser_declarator (c_parser *parser, bool type_seen_p, c_dtr_syn kind,
 		else
 			return make_pointer_declarator (quals_attrs, inner);
     }
+	/* APPLE LOCAL begin radar 5732232 - blocks (C++ cc) */
+	else if (flag_blocks && c_parser_next_token_is (parser, CPP_XOR)) {
+		struct c_declspecs *quals_attrs = build_null_declspecs ();
+		struct c_declarator *inner;
+		c_parser_consume_token (parser);
+		c_parser_declspecs (parser, quals_attrs, false, false, true);
+		inner = c_parser_declarator (parser, type_seen_p, kind, seen_id);
+		if (inner == NULL)
+			return NULL;
+		else
+		/* APPLE LOCAL radar 5814025 (C++ cc) */
+			return make_block_pointer_declarator (quals_attrs, inner);    
+	}
+	/* APPLE LOCAL end radar 5732232 - blocks (C++ cc) */
 	/* Now we have a direct declarator, direct abstract declarator or
      nothing (which counts as a direct abstract declarator here).  */
 	return c_parser_direct_declarator (parser, type_seen_p, kind, seen_id);
