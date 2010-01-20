@@ -4197,9 +4197,17 @@ c_stddef_cpp_builtins(void)
   builtin_define_with_value ("__UINTMAX_TYPE__", UINTMAX_TYPE, 0);
 	/* 
 	 Android <-> Apple GCC reconsiliation THIS IS THE WRONG PLACE TO PUT THIS! 
-	 TODO: Move me!
+	 TODO: Move me! (t-android perhaps?)
 	 */
 	builtin_define ("__ANDROID__");
+	builtin_define ("__arm__");
+	builtin_define ("__arm");
+	builtin_define ("__ARM_ARCH_5__"); 
+	builtin_define ("__ARM_ARCH_5T__");
+	builtin_define ("__ARM_ARCH_5E__");
+	builtin_define ("__ARM_ARCH_5TE__");
+	builtin_define ("__LITTLE_ENDIAN__");
+	
 	if (flag_objc_gc || flag_objc_gc_only)
     {
 		builtin_define ("__strong=__attribute__((objc_gc(strong)))");
