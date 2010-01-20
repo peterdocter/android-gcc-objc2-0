@@ -2478,7 +2478,6 @@ c_parser_declarator (c_parser *parser, bool type_seen_p, c_dtr_syn kind,
 			return NULL;
 		else
 		{
-			warning(0, "entering make_block_pointer_declarator");
 		/* APPLE LOCAL radar 5814025 (C++ cc) */
 			return make_block_pointer_declarator (quals_attrs, inner);    
 		}
@@ -4871,6 +4870,11 @@ sp--;								      \
 } while (0)
 	gcc_assert (!after || c_dialect_objc ());
 	stack[0].expr = c_parser_cast_expression (parser, after);
+	/* APPLE LOCAL begin radar 4426814 */
+	if (c_dialect_objc() && flag_objc_gc)
+    /* APPLE LOCAL radar 5276085 */
+		stack[0].expr.value = objc_build_weak_reference_tree (stack[0].expr.value);
+	/* APPLE LOCAL end radar 4426814 */
 	stack[0].prec = PREC_NONE;
 	sp = 0;
 	while (true)
@@ -4982,6 +4986,11 @@ sp--;								      \
 		}
 		sp++;
 		stack[sp].expr = c_parser_cast_expression (parser, NULL);
+		/* APPLE LOCAL begin radar 4426814 */
+		if (c_dialect_objc() && flag_objc_gc)
+        /* APPLE LOCAL radar 5276085 */
+			stack[sp].expr.value = objc_build_weak_reference_tree (stack[sp].expr.value);
+		/* APPLE LOCAL end radar 4426814 */
 		stack[sp].prec = oprec;
 		stack[sp].op = ocode;
     }
@@ -5748,6 +5757,18 @@ c_parser_postfix_expression (c_parser *parser)
 				break;
 		}
 			break;
+			/* APPLE LOCAL begin radar 5732232 - blocks (C++ cf) */
+		case CPP_XOR:
+			if (flag_blocks) {
+				expr.value = c_parser_block_literal_expr (parser);
+				expr.original_code = ERROR_MARK;
+				break;
+			}
+			c_parser_error (parser, "expected expression");
+			expr.value = error_mark_node;
+			expr.original_code = ERROR_MARK;
+			break;
+			/* APPLE LOCAL end radar 5732232 - blocks (C++ cf) */
 		case CPP_OPEN_SQUARE:
 			if (c_dialect_objc ())
 			{
