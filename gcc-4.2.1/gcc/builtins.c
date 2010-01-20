@@ -315,9 +315,9 @@ get_pointer_alignment (tree exp, unsigned int max_align)
 	      else if (offset)
 		inner = MIN (inner, BITS_PER_UNIT);
 	    }
-	  if (TREE_CODE (exp) == FUNCTION_DECL)
-	    align = FUNCTION_BOUNDARY;
-	  else if (DECL_P (exp))
+			/* APPLE LOCAL begin for-fsf-4_4 3274130 5295549 */ \
+			if (DECL_P (exp))
+			/* APPLE LOCAL end for-fsf-4_4 3274130 5295549 */ \
 	    align = MIN (inner, DECL_ALIGN (exp));
 #ifdef CONSTANT_ALIGNMENT
 	  else if (CONSTANT_CLASS_P (exp))
