@@ -4338,27 +4338,39 @@ handle_common_attribute (tree *node, tree name, tree ARG_UNUSED (args),
 
 static tree
 handle_noreturn_attribute (tree *node, tree name, tree ARG_UNUSED (args),
-			   int ARG_UNUSED (flags), bool *no_add_attrs)
+						   int ARG_UNUSED (flags), bool *no_add_attrs)
 {
-  tree type = TREE_TYPE (*node);
-
-  /* See FIXME comment in c_common_attribute_table.  */
-  if (TREE_CODE (*node) == FUNCTION_DECL)
-    TREE_THIS_VOLATILE (*node) = 1;
-  else if (TREE_CODE (type) == POINTER_TYPE
-	   && TREE_CODE (TREE_TYPE (type)) == FUNCTION_TYPE)
-    TREE_TYPE (*node)
-      = build_pointer_type
-	(build_type_variant (TREE_TYPE (type),
-			     TYPE_READONLY (TREE_TYPE (type)), 1));
-  else
+	tree type = TREE_TYPE (*node);
+	
+	/* See FIXME comment in c_common_attribute_table.  */
+	/* APPLE LOCAL begin radar 4727659 */
+	if (TREE_CODE (*node) == FUNCTION_DECL
+		|| objc_method_decl (TREE_CODE (*node)))
+	/* APPLE LOCAL end radar 4727659 */
+		TREE_THIS_VOLATILE (*node) = 1;
+	else if (TREE_CODE (type) == POINTER_TYPE
+			 && TREE_CODE (TREE_TYPE (type)) == FUNCTION_TYPE)
+		TREE_TYPE (*node)
+		= build_pointer_type
+		(build_type_variant (TREE_TYPE (type),
+							 TYPE_READONLY (TREE_TYPE (type)), 1));
+	/* APPLE LOCAL begin radar 6237713 */
+	else if (TREE_CODE (type) == BLOCK_POINTER_TYPE
+			 && TREE_CODE (TREE_TYPE (type)) == FUNCTION_TYPE)
+		TREE_TYPE (*node)
+		= build_block_pointer_type
+		(build_type_variant (TREE_TYPE (type),
+							 TYPE_READONLY (TREE_TYPE (type)), 1));
+	/* APPLE LOCAL end radar 6237713 */
+	else
     {
-      warning (OPT_Wattributes, "%qE attribute ignored", name);
-      *no_add_attrs = true;
+		warning (OPT_Wattributes, "%qE attribute ignored", name);
+		*no_add_attrs = true;
     }
-
-  return NULL_TREE;
+	
+	return NULL_TREE;
 }
+
 
 /* Handle a "noinline" attribute; arguments as in
    struct attribute_spec.handler.  */
@@ -5626,7 +5638,10 @@ handle_nonnull_attribute (tree *node, tree ARG_UNUSED (name),
 	      return NULL_TREE;
 	    }
 
-	  if (TREE_CODE (TREE_VALUE (argument)) != POINTER_TYPE)
+		/* APPLE LOCAL begin blocks 5925781 */
+		if (TREE_CODE (TREE_VALUE (argument)) != POINTER_TYPE &&
+			TREE_CODE (TREE_VALUE (argument)) != BLOCK_POINTER_TYPE)
+		/* APPLE LOCAL end blocks 5925781 */
 	    {
 	      error ("nonnull argument references non-pointer operand (argument %lu, operand %lu)",
 		   (unsigned long) attr_arg_num, (unsigned long) arg_num);
@@ -5767,18 +5782,21 @@ nonnull_check_p (tree args, unsigned HOST_WIDE_INT param_num)
 
 static void
 check_nonnull_arg (void * ARG_UNUSED (ctx), tree param,
-		   unsigned HOST_WIDE_INT param_num)
+				   unsigned HOST_WIDE_INT param_num)
 {
-  /* Just skip checking the argument if it's not a pointer.  This can
+	/* Just skip checking the argument if it's not a pointer.  This can
      happen if the "nonnull" attribute was given without an operand
      list (which means to check every pointer argument).  */
-
-  if (TREE_CODE (TREE_TYPE (param)) != POINTER_TYPE)
-    return;
-
-  if (integer_zerop (param))
-    warning (OPT_Wnonnull, "null argument where non-null required "
-	     "(argument %lu)", (unsigned long) param_num);
+	
+	/* APPLE LOCAL begin blocks 5925781 */
+	if (TREE_CODE (TREE_TYPE (param)) != POINTER_TYPE &&
+		TREE_CODE (TREE_TYPE (param)) != BLOCK_POINTER_TYPE)
+	/* APPLE LOCAL end blocks 5925781 */
+		return;
+	
+	if (integer_zerop (param))
+		warning (OPT_Wnonnull, "null argument where non-null required "
+				 "(argument %lu)", (unsigned long) param_num);
 }
 
 /* Helper for nonnull attribute handling; fetch the operand number

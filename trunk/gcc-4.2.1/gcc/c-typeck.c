@@ -532,42 +532,51 @@ composite_type (tree t1, tree t2)
 static tree
 common_pointer_type (tree t1, tree t2)
 {
-  tree attributes;
-  tree pointed_to_1, mv1;
-  tree pointed_to_2, mv2;
-  tree target;
-
-  /* Save time if the two types are the same.  */
-
-  if (t1 == t2) return t1;
-
-  /* If one type is nonsense, use the other.  */
-  if (t1 == error_mark_node)
-    return t2;
-  if (t2 == error_mark_node)
-    return t1;
-
-  gcc_assert (TREE_CODE (t1) == POINTER_TYPE
-	      && TREE_CODE (t2) == POINTER_TYPE);
-
-  /* Merge the attributes.  */
-  attributes = targetm.merge_type_attributes (t1, t2);
-
-  /* Find the composite type of the target types, and combine the
+	tree attributes;
+	tree pointed_to_1, mv1;
+	tree pointed_to_2, mv2;
+	tree target;
+	
+	/* Save time if the two types are the same.  */
+	
+	if (t1 == t2) return t1;
+	
+	/* If one type is nonsense, use the other.  */
+	if (t1 == error_mark_node)
+		return t2;
+	if (t2 == error_mark_node)
+		return t1;
+	
+	/* APPLE LOCAL begin blocks 6065211 */
+	gcc_assert ((TREE_CODE (t1) == POINTER_TYPE
+				 && TREE_CODE (t2) == POINTER_TYPE)
+				|| (TREE_CODE (t1) == BLOCK_POINTER_TYPE
+					&& TREE_CODE (t2) == BLOCK_POINTER_TYPE));
+	/* APPLE LOCAL end blocks 6065211 */
+	
+	/* Merge the attributes.  */
+	attributes = targetm.merge_type_attributes (t1, t2);
+	
+	/* Find the composite type of the target types, and combine the
      qualifiers of the two types' targets.  Do not lose qualifiers on
      array element types by taking the TYPE_MAIN_VARIANT.  */
-  mv1 = pointed_to_1 = TREE_TYPE (t1);
-  mv2 = pointed_to_2 = TREE_TYPE (t2);
-  if (TREE_CODE (mv1) != ARRAY_TYPE)
-    mv1 = TYPE_MAIN_VARIANT (pointed_to_1);
-  if (TREE_CODE (mv2) != ARRAY_TYPE)
-    mv2 = TYPE_MAIN_VARIANT (pointed_to_2);
-  target = composite_type (mv1, mv2);
-  t1 = build_pointer_type (c_build_qualified_type
-			   (target,
-			    TYPE_QUALS (pointed_to_1) |
-			    TYPE_QUALS (pointed_to_2)));
-  return build_type_attribute_variant (t1, attributes);
+	mv1 = pointed_to_1 = TREE_TYPE (t1);
+	mv2 = pointed_to_2 = TREE_TYPE (t2);
+	if (TREE_CODE (mv1) != ARRAY_TYPE)
+		mv1 = TYPE_MAIN_VARIANT (pointed_to_1);
+	if (TREE_CODE (mv2) != ARRAY_TYPE)
+		mv2 = TYPE_MAIN_VARIANT (pointed_to_2);
+	target = composite_type (mv1, mv2);
+	/* APPLE LOCAL begin blocks 6065211 */
+	t1 = c_build_qualified_type (target,
+								 TYPE_QUALS (pointed_to_1) |
+								 TYPE_QUALS (pointed_to_2));
+	if (TREE_CODE (t2) == BLOCK_POINTER_TYPE)
+		t1 = build_block_pointer_type (t1);
+	else
+		t1 = build_pointer_type (t1);
+	/* APPLE LOCAL end blocks 6065211 */
+	return build_type_attribute_variant (t1, attributes);
 }
 
 /* Return the common type for two arithmetic types under the usual
@@ -850,6 +859,13 @@ comptypes_internal (tree type1, tree type2)
 
   switch (TREE_CODE (t1))
     {
+		/* APPLE LOCAL begin radar 5795493 */
+	case BLOCK_POINTER_TYPE:
+		val = (TREE_CODE (t2) == BLOCK_POINTER_TYPE) && 
+		types_are_block_compatible (TREE_TYPE (t1), TREE_TYPE (t2));
+		break;
+		
+		/* APPLE LOCAL end radar 5795493 */
     case POINTER_TYPE:
       /* Do not remove mode or aliasing information.  */
       if (TYPE_MODE (t1) != TYPE_MODE (t2)
@@ -939,24 +955,33 @@ comptypes_internal (tree type1, tree type2)
 static int
 comp_target_types (tree ttl, tree ttr)
 {
-  int val;
-  tree mvl, mvr;
-
-  /* Do not lose qualifiers on element types of array types that are
+	int val;
+	tree mvl, mvr;
+	
+	/* APPLE LOCAL begin blocks 6065211 */
+	if (TREE_CODE (ttl) == BLOCK_POINTER_TYPE
+		&& TREE_CODE (ttr) == BLOCK_POINTER_TYPE)
+		return types_are_block_compatible (TREE_TYPE (ttl),
+										   TREE_TYPE (ttr));
+	if (TREE_CODE (ttl) != TREE_CODE (ttr))
+		return 0;
+	/* APPLE LOCAL end blocks 6065211 */
+	
+	/* Do not lose qualifiers on element types of array types that are
      pointer targets by taking their TYPE_MAIN_VARIANT.  */
-  mvl = TREE_TYPE (ttl);
-  mvr = TREE_TYPE (ttr);
-  if (TREE_CODE (mvl) != ARRAY_TYPE)
-    mvl = TYPE_MAIN_VARIANT (mvl);
-  if (TREE_CODE (mvr) != ARRAY_TYPE)
-    mvr = TYPE_MAIN_VARIANT (mvr);
-  val = comptypes (mvl, mvr);
-
-  if (val == 2 && pedantic)
-    pedwarn ("types are not quite compatible");
-  return val;
+	mvl = TREE_TYPE (ttl);
+	mvr = TREE_TYPE (ttr);
+	if (TREE_CODE (mvl) != ARRAY_TYPE)
+		mvl = TYPE_MAIN_VARIANT (mvl);
+	if (TREE_CODE (mvr) != ARRAY_TYPE)
+		mvr = TYPE_MAIN_VARIANT (mvr);
+	val = comptypes (mvl, mvr);
+	
+	if (val == 2 && pedantic)
+		pedwarn ("types are not quite compatible");
+	return val;
 }
-
+
 /* Subroutines of `comptypes'.  */
 
 /* Determine whether two trees derive from the same translation unit.
@@ -2093,9 +2118,52 @@ build_external_ref (tree id, int fun, location_t loc)
   /* In Objective-C, an instance variable (ivar) may be preferred to
      whatever lookup_name() found.  */
   decl = objc_lookup_ivar (decl, id);
-
+/* APPLE LOCAL begin radar 5732232 - blocks (C++ ci) */
   if (decl && decl != error_mark_node)
-    ref = decl;
+  {
+      if (cur_block
+		  && (TREE_CODE (decl) == VAR_DECL
+			  || TREE_CODE (decl) == PARM_DECL)
+		  && !lookup_name_in_block (id, &decl))
+	  {
+		  /* APPLE LOCAL begin radar 5803005 (C++ ci) */
+		  bool gdecl;
+		  /* We are referencing a variable inside a block whose declaration
+		   is outside.  */
+		  gcc_assert (decl && 
+					  (TREE_CODE (decl) == VAR_DECL
+					   || TREE_CODE (decl) == PARM_DECL));
+		  gdecl = (TREE_CODE (decl) == VAR_DECL && 
+				   /* APPLE LOCAL radar 6177162 */
+				   (DECL_EXTERNAL (decl) || TREE_STATIC (decl)));
+		  /* Treat all 'global' variables as 'byref' by default. */
+          /* APPLE LOCAL begin radar 6014138 (C++ ci) */
+		  if (gdecl || (TREE_CODE (decl) == VAR_DECL && COPYABLE_BYREF_LOCAL_VAR (decl)))
+          /* APPLE LOCAL end radar 6014138 (C++ ci) */
+		  {
+			  /* APPLE LOCAL begin radar 5803600 (C++ ci) */
+			  /* byref globals are directly accessed. */
+			  if (!gdecl)
+			  /* build a decl for the byref variable. */
+				  decl = build_block_byref_decl (id, decl, decl);
+			  else
+				  add_block_global_byref_list (decl);
+		  }
+		  else
+		  {
+			  /* 'byref' globals are never copied-in. So, do not add
+			   them to the copied-in list. */
+			  if (!in_block_global_byref_list (decl))
+			  /* build a new decl node. set its type to 'const' type
+			   of the old decl. */
+				  decl = build_block_ref_decl (id, decl);
+			  /* APPLE LOCAL end radar 5803600 (C++ ci) */
+			  /* APPLE LOCAL end radar 5803005 (C++ ci) */
+		  }
+	  }
+      ref = decl;
+  }
+	/* APPLE LOCAL end radar 5732232 - blocks (C++ ci) */
   else if (fun)
     /* Implicit function declaration.  */
     ref = implicitly_declare (id);
@@ -2288,7 +2356,10 @@ build_function_call (tree function, tree params)
   if (TREE_CODE (fntype) == ERROR_MARK)
     return error_mark_node;
 
-  if (!(TREE_CODE (fntype) == POINTER_TYPE
+	/* APPLE LOCAL begin radar 5732232 - blocks */
+	if (!((TREE_CODE (fntype) == POINTER_TYPE 
+		   || TREE_CODE (fntype) == BLOCK_POINTER_TYPE)
+		  /* APPLE LOCAL end radar 5732232 - blocks */
 	&& TREE_CODE (TREE_TYPE (fntype)) == FUNCTION_TYPE))
     {
       error ("called object %qE is not a function", function);
@@ -2354,7 +2425,11 @@ build_function_call (tree function, tree params)
 
   check_function_arguments (TYPE_ATTRIBUTES (fntype), coerced_params,
 			    TYPE_ARG_TYPES (fntype));
-
+	/* APPLE LOCAL begin radar 5732232 - blocks */
+	if (TREE_CODE (TREE_TYPE (function)) == BLOCK_POINTER_TYPE)
+		result = build_block_call (fntype, function, coerced_params);
+	else
+	/* APPLE LOCAL end radar 5732232 - blocks */
   if (require_constant_value)
     {
       result = fold_build3_initializer (CALL_EXPR, TREE_TYPE (fntype),
@@ -2424,11 +2499,21 @@ convert_arguments (tree typelist, tree values, tree function, tree fundecl)
       int argnum = parmnum + 1;
       const char *invalid_func_diag;
 
-      if (type == void_type_node)
-	{
-	  error ("too many arguments to function %qE", function);
-	  break;
-	}
+		if (type == void_type_node)
+		{
+			/* APPLE LOCAL begin radar 5732232 - blocks */
+			if (TREE_CODE (TREE_TYPE (function)) == BLOCK_POINTER_TYPE)
+			{
+				error ("too many arguments to block call");
+				break;
+			}
+			/* APPLE LOCAL end radar 5732232 - blocks */
+			/* APPLE LOCAL begin radar 4491608 */
+			error ("too many arguments to function %qE", selector ? selector 
+				   : function);
+			/* APPLE LOCAL end radar 4491608 */
+			break;
+		}
 
       if (selector && argnum > 2)
 	{
@@ -2607,10 +2692,15 @@ convert_arguments (tree typelist, tree values, tree function, tree fundecl)
 	typetail = TREE_CHAIN (typetail);
     }
 
-  if (typetail != 0 && TREE_VALUE (typetail) != void_type_node)
+	if (typetail != 0 && TREE_VALUE (typetail) != void_type_node)
     {
-      error ("too few arguments to function %qE", function);
-      return error_mark_node;
+		/* APPLE LOCAL begin radar 5732232 - blocks */
+		if (TREE_CODE (TREE_TYPE (function)) == BLOCK_POINTER_TYPE)
+			error ("too few arguments to block %qE", function);
+		else
+			error ("too few arguments to function %qE", function);
+		/* APPLE LOCAL end radar 5732232 - blocks */
+		return error_mark_node;
     }
 
   return nreverse (result);
@@ -3332,7 +3422,12 @@ build_conditional_expr (tree ifexp, tree op1, tree op2)
 	pedwarn ("ISO C forbids conditional expr with only one void side");
       result_type = void_type_node;
     }
-  else if (code1 == POINTER_TYPE && code2 == POINTER_TYPE)
+	/* APPLE LOCAL begin blocks 6065211 */
+  else if ((code1 == POINTER_TYPE
+			|| code1 == BLOCK_POINTER_TYPE)
+		   && (code2 == POINTER_TYPE
+			   || code2 == BLOCK_POINTER_TYPE))
+  /* APPLE LOCAL end blocks 6065211 */
     {
       if (comp_target_types (type1, type2))
 	result_type = common_pointer_type (type1, type2);
@@ -3340,6 +3435,14 @@ build_conditional_expr (tree ifexp, tree op1, tree op2)
 	result_type = qualify_type (type2, type1);
       else if (null_pointer_constant_p (orig_op2))
 	result_type = qualify_type (type1, type2);
+		/* APPLE LOCAL begin blocks 6065211 */
+      else if (code2 == BLOCK_POINTER_TYPE
+			   && VOID_TYPE_P (TREE_TYPE (type1)))
+		  result_type = type2;
+      else if (code1 == BLOCK_POINTER_TYPE
+			   && VOID_TYPE_P (TREE_TYPE (type2)))
+		  result_type = type1;
+		/* APPLE LOCAL end blocks 6065211 */
       else if (VOID_TYPE_P (TREE_TYPE (type1)))
 	{
 	  if (pedantic && TREE_CODE (TREE_TYPE (type2)) == FUNCTION_TYPE)
@@ -3382,7 +3485,31 @@ build_conditional_expr (tree ifexp, tree op1, tree op2)
 	}
       result_type = type2;
     }
-
+	/* APPLE LOCAL begin radar 5732232 - blocks (C++ co) */
+	/* APPLE LOCAL radar 5957801 */
+  else if (code1 == BLOCK_POINTER_TYPE && code2 == INTEGER_TYPE)
+  {
+      if (!null_pointer_constant_p (orig_op2))
+		  error ("block pointer/integer type mismatch in conditional expression");
+      else
+	  {
+		  op2 = convert (type1, null_pointer_node);
+	  }
+      result_type = type1;
+  }
+	/* APPLE LOCAL radar 5957801 */
+  else if (code2 == BLOCK_POINTER_TYPE && code1 == INTEGER_TYPE)
+  {
+      if (!null_pointer_constant_p (orig_op1))
+		  error ("block pointer/integer type mismatch in conditional expression");
+      else
+	  {
+		  op1 = convert (type2, null_pointer_node);
+	  }
+      result_type = type2;
+  }
+	
+	/* APPLE LOCAL end radar 5732232 - blocks (C++ co) */
   if (!result_type)
     {
       if (flag_cond_mismatch)
@@ -3521,6 +3648,12 @@ build_c_cast (tree type, tree expr)
 
       otype = TREE_TYPE (value);
 
+		/* APPLE LOCAL begin radar 5732232 - blocks */
+		if (TREE_CODE (otype) == BLOCK_POINTER_TYPE &&
+			TREE_CODE (type) == POINTER_TYPE && VOID_TYPE_P (TREE_TYPE (type)))
+			return build1 (NOP_EXPR, type, value);
+		/* APPLE LOCAL end radar 5732232 - blocks */
+		
       /* Optionally warn about potentially worrisome casts.  */
 
       if (warn_cast_qual
@@ -7216,14 +7349,85 @@ c_finish_goto_ptr (tree expr)
   return add_stmt (build1 (GOTO_EXPR, void_type_node, expr));
 }
 
+/* APPLE LOCAL begin radar 5732232 - blocks (C++ cm) */
+/** c_finish_block_return_stmt - Utilty routine to figure out block's return
+ type.
+ */
+static tree
+c_finish_block_return_stmt (tree retval)
+{
+	tree valtype;
+	/* If this is the first return we've seen in the block, infer the type of
+     the block from it. */
+	if (cur_block->return_type == NULL_TREE)
+    {
+		tree restype;
+		if (retval)
+		{
+			restype = TYPE_MAIN_VARIANT (TREE_TYPE (retval));
+			TREE_TYPE (current_function_decl)
+			= build_function_type (restype,
+                                   TYPE_ARG_TYPES (TREE_TYPE (current_function_decl)));
+			TREE_TYPE (DECL_RESULT (current_function_decl)) = restype;
+			relayout_decl (DECL_RESULT (current_function_decl));
+		}
+		else
+			restype = void_type_node;
+		
+		cur_block->return_type = restype;
+    }
+	
+	/* Verify that this result type matches the previous one.  We are
+     pickier with blocks than for normal functions because this is a
+     new feature and we set the rules. */
+	if (TREE_CODE (cur_block->return_type) == VOID_TYPE)
+    {
+		if (retval)
+		{
+			error ("void block should not return a value");
+			retval = NULL_TREE;
+		}
+		return retval;
+    }
+	
+	if (!retval)
+    {
+		error ("non-void block should return a value");
+		return error_mark_node;
+    }
+	
+	/* We have a non-void block with an expression, continue checking.  */
+	valtype = TREE_TYPE (retval);
+	
+	/* For now, restrict multiple return statements in a block to have
+     strict compatible types only. */
+	if (!types_are_block_compatible (cur_block->return_type, valtype))
+		error ("incompatible type returning %qT, expected %qT",
+			   valtype, cur_block->return_type);
+	return retval;
+}
+/* APPLE LOCAL end radar 5732232 - blocks (C++ cm) */
+
 /* Generate a C `return' statement.  RETVAL is the expression for what
    to return, or a null pointer for `return;' with no value.  */
 
 tree
 c_finish_return (tree retval)
 {
-  tree valtype = TREE_TYPE (TREE_TYPE (current_function_decl)), ret_stmt;
-  bool no_warning = false;
+	/* APPLE LOCAL begin radar 5732232 - blocks */
+	tree valtype, ret_stmt;
+	bool no_warning = false;
+	
+	/* APPLE LOCAL radar 5822844 - radar 6185344 */
+	if (cur_block && !cur_block->block_has_return_type)
+    {
+		retval = c_finish_block_return_stmt (retval);
+		if (retval == error_mark_node)
+			return NULL_TREE;
+    }
+	
+	valtype = TREE_TYPE (TREE_TYPE (current_function_decl));
+	/* APPLE LOCAL end radar 5732232 - blocks */
 
   if (TREE_THIS_VOLATILE (current_function_decl))
     warning (0, "function declared %<noreturn%> has a %<return%> statement");
@@ -7300,7 +7504,15 @@ c_finish_return (tree retval)
 		  && !DECL_EXTERNAL (inner)
 		  && !TREE_STATIC (inner)
 		  && DECL_CONTEXT (inner) == current_function_decl)
-		warning (0, "function returns address of local variable");
+		  /* APPLE LOCAL begin radar 5732232 - blocks (C++ cn) */
+		  {
+			  if (TREE_CODE (valtype) == BLOCK_POINTER_TYPE)
+	          /* APPLE LOCAL radar 6048570 */
+                  error ("returning block that lives on the local stack");
+			  else
+                  warning (0, "function returns address of local variable");
+		  }
+                /* APPLE LOCAL end radar 5732232 - blocks (C++ cn) */
 	      break;
 
 	    default:
