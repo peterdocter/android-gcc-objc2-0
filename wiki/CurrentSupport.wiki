@@ -19,7 +19,8 @@ Protocols:
   * the initial protocol concept works, however there is no identifier for class conformance to a given protocol (properly atleast)
 
 Blocks:
-  * Blocks have not been tested in c, c++, objc, or obj-c++ (not even sure they compile right yet)
+  * Blocks work in c
+  * Blocks still need testing in c++, objc, and obj-c++
 
 Fast enumeration (foreach/for-in):
   * Not yet tested at all (also not sure if they compile yet)
