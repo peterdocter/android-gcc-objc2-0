@@ -4751,6 +4751,13 @@ maybe_warn_string_init (tree type, struct c_expr expr)
     pedwarn_init ("array initialized from parenthesized string constant");
 }
 
+/* APPLE LOCAL begin radar 5932809 - copyable byref blocks */
+tree do_digest_init (tree type, tree init)
+{
+	return digest_init (type, init, true, false);
+}
+/* APPLE LOCAL end radar 5932809 - copyable byref blocks */
+
 /* Digest the parser output INIT as an initializer for type TYPE.
    Return a C expression of type TYPE to represent the initial value.
 
