@@ -556,6 +556,9 @@ static tree handle_pure_attribute (tree *, tree, tree, int, bool *);
 static tree handle_novops_attribute (tree *, tree, tree, int, bool *);
 static tree handle_deprecated_attribute (tree *, tree, tree, int,
 					 bool *);
+/* APPLE LOCAL begin "unavailable" attribute (Radar 2809697) --ilr */
+static tree handle_unavailable_attribute (tree *, tree, tree, int,  bool *);
+/* APPLE LOCAL end "unavailable" attribute --ilr */
 static tree handle_vector_size_attribute (tree *, tree, tree, int,
 					  bool *);
 static tree handle_nonnull_attribute (tree *, tree, tree, int, bool *);
@@ -564,6 +567,8 @@ static tree handle_cleanup_attribute (tree *, tree, tree, int, bool *);
 static tree handle_warn_unused_result_attribute (tree *, tree, tree, int,
 						 bool *);
 static tree handle_sentinel_attribute (tree *, tree, tree, int, bool *);
+/* APPLE LOCAL radar 5932809 - copyable byref blocks */
+static tree handle_blocks_attribute (tree *, tree, tree, int, bool *);
 
 static void check_function_nonnull (tree, tree);
 static void check_nonnull_arg (void *, tree, unsigned HOST_WIDE_INT);
@@ -619,8 +624,9 @@ const struct attribute_spec c_common_attribute_table[] =
 			      handle_section_attribute },
   { "aligned",                0, 1, false, false, false,
 			      handle_aligned_attribute },
-  { "weak",                   0, 0, true,  false, false,
-			      handle_weak_attribute },
+	/* APPLE LOCAL weak types 5954418 */
+	{ "weak",                   0, 0, false, false, false,
+		handle_weak_attribute },
   { "alias",                  1, 1, true,  false, false,
 			      handle_alias_attribute },
   { "weakref",                0, 1, true,  false, false,
@@ -641,6 +647,9 @@ const struct attribute_spec c_common_attribute_table[] =
 			      handle_novops_attribute },
   { "deprecated",             0, 0, false, false, false,
 			      handle_deprecated_attribute },
+	/* APPLE LOCAL begin "unavailable" attribute (Radar 2809697) --ilr */
+	{ "unavailable",            0, 0, false, false, false,
+		handle_unavailable_attribute },
   { "vector_size",	      1, 1, false, true, false,
 			      handle_vector_size_attribute },
   { "visibility",	      1, 1, false, false, false,
@@ -656,8 +665,11 @@ const struct attribute_spec c_common_attribute_table[] =
 			      handle_cleanup_attribute },
   { "warn_unused_result",     0, 0, false, true, true,
 			      handle_warn_unused_result_attribute },
-  { "sentinel",               0, 1, false, true, true,
-			      handle_sentinel_attribute },
+	/* APPLE LOCAL two arg sentinel 5631180 */
+	{ "sentinel",               0, 2, false, true, true,
+		handle_sentinel_attribute },
+	/* APPLE LOCAL radar 5932809 - copyable byref blocks */
+	{ "blocks", 1, 1, true, false, false, handle_blocks_attribute },
   { NULL,                     0, 0, false, false, false, NULL }
 };
 
@@ -4169,7 +4181,9 @@ boolean_increment (enum tree_code code, tree arg)
   TREE_SIDE_EFFECTS (val) = 1;
   return val;
 }
-
+
+#define builtin_define(TXT) cpp_define (parse_in, TXT)
+
 /* Built-in macros for stddef.h, that require macros defined in this
    file.  */
 void
@@ -4181,6 +4195,38 @@ c_stddef_cpp_builtins(void)
   builtin_define_with_value ("__WINT_TYPE__", WINT_TYPE, 0);
   builtin_define_with_value ("__INTMAX_TYPE__", INTMAX_TYPE, 0);
   builtin_define_with_value ("__UINTMAX_TYPE__", UINTMAX_TYPE, 0);
+	/* 
+	 Android <-> Apple GCC reconsiliation THIS IS THE WRONG PLACE TO PUT THIS! 
+	 TODO: Move me!
+	 */
+	builtin_define ("__ANDROID__");
+	if (flag_objc_gc || flag_objc_gc_only)
+    {
+		builtin_define ("__strong=__attribute__((objc_gc(strong)))");
+		builtin_define ("__weak=__attribute__((objc_gc(weak)))");
+		builtin_define ("__OBJC_GC__");
+    }
+	else
+    {
+		builtin_define ("__strong=");
+		/* APPLE LOCAL radar 5847976 */
+		builtin_define ("__weak=__attribute__((objc_gc(weak)))");
+    }
+	/* APPLE LOCAL end ObjC GC */
+	/* APPLE LOCAL begin radar 5932809 - copyable byref blocks */
+	if (flag_blocks) {
+		builtin_define ("__block=__attribute__((__blocks__(byref)))");
+	}
+	/* APPLE LOCAL begin C* warnings to easy porting to new abi */
+	if (flag_objc_abi == 2)
+		builtin_define ("__OBJC2__");
+	/* APPLE LOCAL end C* warnings to easy porting to new abi */
+	/* APPLE LOCAL begin radar 5072864 */
+	if (flag_objc_zerocost_exceptions)
+		builtin_define ("OBJC_ZEROCOST_EXCEPTIONS");
+	/* APPLE LOCAL radar 4899595 */
+	builtin_define ("OBJC_NEW_PROPERTIES");
+	/* APPLE LOCAL end radar 5072864 */
 }
 
 static void
@@ -5369,6 +5415,71 @@ handle_deprecated_attribute (tree *node, tree name,
 
   return NULL_TREE;
 }
+
+/* APPLE LOCAL begin "unavailable" attribute (Radar 2809697) --ilr */
+/* Handle a "unavailable" attribute; arguments as in
+ struct attribute_spec.handler.  */
+
+static tree
+handle_unavailable_attribute (tree *node, tree name,
+							  tree args ATTRIBUTE_UNUSED,
+							  int flags ATTRIBUTE_UNUSED,
+							  bool *no_add_attrs)
+{
+	tree type = NULL_TREE;
+	int warn = 0;
+	const char *what = NULL;
+	
+	if (DECL_P (*node))
+    {
+		tree decl = *node;
+		type = TREE_TYPE (decl);
+		
+		if (TREE_CODE (decl) == TYPE_DECL
+			|| TREE_CODE (decl) == PARM_DECL
+			|| TREE_CODE (decl) == VAR_DECL
+			|| TREE_CODE (decl) == FUNCTION_DECL
+			/* APPLE LOCAL begin radar 3803157 - objc attribute */
+			|| TREE_CODE (decl) == FIELD_DECL
+			|| objc_method_decl (TREE_CODE (decl)))
+		/* APPLE LOCAL end radar 3803157 - objc attribute */
+		{
+			TREE_UNAVAILABLE (decl) = 1;
+		}
+		else
+			warn = 1;
+    }
+	else if (TYPE_P (*node))
+    {
+		if (!(flags & (int) ATTR_FLAG_TYPE_IN_PLACE))
+			*node = build_variant_type_copy (*node);
+		TREE_UNAVAILABLE (*node) = 1;
+		type = *node;
+    }
+	else
+		warn = 1;
+	
+	if (warn)
+    {
+		*no_add_attrs = true;
+		if (type && TYPE_NAME (type))
+		{
+			if (TREE_CODE (TYPE_NAME (type)) == IDENTIFIER_NODE)
+				what = IDENTIFIER_POINTER (TYPE_NAME (*node));
+			else if (TREE_CODE (TYPE_NAME (type)) == TYPE_DECL
+					 && DECL_NAME (TYPE_NAME (type)))
+				what = IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (type)));
+		}
+		if (what)
+			warning (0, "`%s' attribute ignored for `%s'",
+					 IDENTIFIER_POINTER (name), what);
+		else
+			warning (0, "`%s' attribute ignored", IDENTIFIER_POINTER (name));
+    }
+	
+	return NULL_TREE;
+}
+/* APPLE LOCAL end "unavailable" attribute --ilr */
 
 /* Handle a "vector_size" attribute; arguments as in
    struct attribute_spec.handler.  */
