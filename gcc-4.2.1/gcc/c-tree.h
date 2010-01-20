@@ -467,6 +467,8 @@ extern tree finish_struct (tree, tree, tree);
 extern struct c_arg_info *get_parm_info (bool);
 extern tree grokfield (struct c_declarator *, struct c_declspecs *, tree);
 extern tree groktypename (struct c_type_name *);
+/* APPLE LOCAL blocks 6339747 */
+extern tree grokblockdecl (struct c_declspecs *, struct c_declarator *);
 extern tree grokparm (const struct c_parm *);
 extern tree implicitly_declare (tree);
 extern void keep_next_level (void);
@@ -500,6 +502,10 @@ extern struct c_declarator *build_function_declarator (struct c_arg_info *,
 extern struct c_declarator *build_id_declarator (tree);
 extern struct c_declarator *make_pointer_declarator (struct c_declspecs *,
 						     struct c_declarator *);
+/* APPLE LOCAL begin radar 5814025 - blocks (C++ cg) */
+extern struct c_declarator *make_block_pointer_declarator (struct c_declspecs *,
+														   struct c_declarator *);
+/* APPLE LOCAL end radar 5814025 - blocks (C++ cg) */
 extern struct c_declspecs *build_null_declspecs (void);
 extern struct c_declspecs *declspecs_add_qual (struct c_declspecs *, tree);
 extern struct c_declspecs *declspecs_add_type (struct c_declspecs *,
