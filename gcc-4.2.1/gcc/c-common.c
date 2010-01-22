@@ -4195,46 +4195,6 @@ c_stddef_cpp_builtins(void)
   builtin_define_with_value ("__WINT_TYPE__", WINT_TYPE, 0);
   builtin_define_with_value ("__INTMAX_TYPE__", INTMAX_TYPE, 0);
   builtin_define_with_value ("__UINTMAX_TYPE__", UINTMAX_TYPE, 0);
-	/* 
-	 Android <-> Apple GCC reconsiliation THIS IS THE WRONG PLACE TO PUT THIS! 
-	 TODO: Move me! (t-android perhaps?)
-	 */
-	builtin_define ("__ANDROID__");
-	builtin_define ("__arm__");
-	builtin_define ("__arm");
-	builtin_define ("__ARM_ARCH_5__"); 
-	builtin_define ("__ARM_ARCH_5T__");
-	builtin_define ("__ARM_ARCH_5E__");
-	builtin_define ("__ARM_ARCH_5TE__");
-	builtin_define ("__LITTLE_ENDIAN__");
-	
-	if (flag_objc_gc || flag_objc_gc_only)
-    {
-		builtin_define ("__strong=__attribute__((objc_gc(strong)))");
-		builtin_define ("__weak=__attribute__((objc_gc(weak)))");
-		builtin_define ("__OBJC_GC__");
-    }
-	else
-    {
-		builtin_define ("__strong=");
-		/* APPLE LOCAL radar 5847976 */
-		builtin_define ("__weak=__attribute__((objc_gc(weak)))");
-    }
-	/* APPLE LOCAL end ObjC GC */
-	/* APPLE LOCAL begin radar 5932809 - copyable byref blocks */
-	if (flag_blocks) {
-		builtin_define ("__block=__attribute__((__blocks__(byref)))");
-	}
-	/* APPLE LOCAL begin C* warnings to easy porting to new abi */
-	if (flag_objc_abi == 2)
-		builtin_define ("__OBJC2__");
-	/* APPLE LOCAL end C* warnings to easy porting to new abi */
-	/* APPLE LOCAL begin radar 5072864 */
-	if (flag_objc_zerocost_exceptions)
-		builtin_define ("OBJC_ZEROCOST_EXCEPTIONS");
-	/* APPLE LOCAL radar 4899595 */
-	builtin_define ("OBJC_NEW_PROPERTIES");
-	/* APPLE LOCAL end radar 5072864 */
 }
 
 static void
