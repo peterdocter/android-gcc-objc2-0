@@ -16,7 +16,7 @@ Things to download:
 
 After you have all three of these, you need to choose a target directory to install to that is appropriate for your platform. e.g. /usr/local/android or where ever seems appropriate. 
 
-Create that directory and then add a new sub-directory named arm-eabi which will be used to house your processor specific binaries headers and libraries.
+Create that directory and then add a new sub-directory named arm-android-eabi which will be used to house your processor specific binaries headers and libraries.
 
 = Patching =
 
@@ -41,7 +41,7 @@ Example
 {{{
 mkdir build
 cd build
-../configure --prefix=/usr/local/android --target=arm-eabi --disable-werror
+../configure --prefix=/usr/local/android --target=arm-android-eabi --disable-werror
 make
 make install
 }}}
