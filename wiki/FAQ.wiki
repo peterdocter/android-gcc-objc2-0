@@ -1,0 +1,53 @@
+#summary Frequently Asked Questions (or ones that should be)
+
+= Introduction =
+
+This hopefully should answer any of the standard questions that users should have crop up.
+
+
+= FAQ =
+
+===What does this do differently than the standard NDK?===
+This project is an addendum to the standard NDK, in that it adds two new languages that normally are not supported as well as some flags and features. The two languages added are Objective-C and Objective-C++, some of the features include blocks, and objc 2.0 properties, and a few others.
+
+===What is the license of this?===
+GNU GPLv2
+
+===Can I help?===
+Absolutely, there is alot of testing that needs to be done. There are a number of features that still need merging, if you are adept at building compilers feel free to contact me.
+
+===No really, how can I help? $$$===
+Well that can be arranged, feel free to contact me.
+
+===Where can I contact you at?===
+support@versv.com
+
+===Wait a second, isnt Objective-C the iPhone language?===
+Sure is... but its just the language, there are no frameworks to add in the iPhone SDK so other than just the language, the similarity stops there.
+
+===Hold up, you mean to say its the same language as the iPhone, couldn't someone make code that would be compatible between the two platforms?===
+Absolutely, this is why this project was made: A desire to create one-source set applications that can run on both platforms with the same functionality. Of course this will need a complementary SDK for the Android that is code compatible with the iPhone SDK, but before that can be done, the Android needs to speak the same language.
+
+===Does this mean you are trying to make a compiler that eliminates Java from the Android?===
+ABSOLUTELY NOT! This is intended for creation of shared libraries for JNI style targets, or command line apps.
+
+===I was looking at the source code, and there are all these comments with 'APPLE radar' stuff, what are these? Is Apple doing this?!===
+For clarity, this project has no direct association with Google, Apple, or the Android teams. This is a fork of the Android NDK GCC, and one of the major sources for some of the linguistic additions for Objective-C 2.0 are sourced from Apple's GCC.
+
+===GCC 4.2.1, but but I want 4.3.1! Can you make that instead?===
+If you notice, there are a fair number of files modified to add in this support to 4.2.1. To add that support to two compilers would be more of a task that would be reasonably accomplishable. So that being said the project is a merge from the Apple GCC (which is a variant of 4.2.1).
+
+===What version of Apple GCC are you merging from? And where can I get the source for that?===
+[http://www.opensource.apple.com/tarballs/gcc/gcc-5646.1.tar.gz gcc-5646.1]
+
+===I checked out the source and its not compiling, I get <INSERT ERROR HERE> error. How can I fix this?===
+First off, submit an issue. Make sure to include your operating system that you are compiling on, the configuration flags you are passing to the script and a snippet of the error that you get (not a complete build log). Other than that, if you can nail down the fix post that too.
+
+===Can this work as a drop in compiler for Xcode?===
+Not yet, its close. There are a few things that it still needs to do that.
+
+===I built your compiler and now I am having issues with the compiler for making a production app, what do I do?===
+Download the standard NDK. Build you app with that. This compiler is experimental at the moment, so it would be highly suggested that you create production libraries with the official NDK and not this one.
+
+===How close is this project to being finished/production-ready?===
+There are a number of tasks that need to be done. I would say that it is "beta" quality (some things work, some things just are still flat out broken).
