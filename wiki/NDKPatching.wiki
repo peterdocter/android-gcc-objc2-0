@@ -5,7 +5,7 @@
 This is a a brief tutorial for patching and building the Android NDK with ObjC 2.0 support. More detail, screenshots etc coming soon...
 
 
-= Pre-Requites =
+= Prerequisites =
 
 Things to download:
  * Get the appropriate [http://developer.android.com/sdk/ndk/1.6_r1/index.html  NDK for your platform] this will be used for the pre-compiled versions of some of the native libraries required for building the NDK
