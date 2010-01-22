@@ -41,6 +41,10 @@ extern int errno;
 
 #include "libiberty.h"
 
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+
 /* Virtually every UN*X system now in common use (except for pre-4.3-tahoe
    BSD systems) now provides getcwd as called for by POSIX.  Allow for
    the few exceptions to the general rule here.  */
