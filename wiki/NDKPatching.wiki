@@ -39,7 +39,9 @@ Configure and make the toolchain as normal making sure to use the --prefix= flag
 Example
 
 {{{
-./configure --prefix=/usr/local/android --target=arm-eabi --disable-werror
+mkdir build
+cd build
+../configure --prefix=/usr/local/android --target=arm-eabi --disable-werror
 make
 make install
 }}}
