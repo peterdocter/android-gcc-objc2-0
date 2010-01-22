@@ -2,9 +2,37 @@
 
 = Introduction =
 
-This is a placeholder for a brief tutorial for patching and building the Android NDK with ObjC 2.0 support
+This is a a brief tutorial for patching and building the Android NDK with ObjC 2.0 support. More detail, screenshots etc coming soon...
 
 
-= Details =
+= Pre-Requites =
 
-Coming soon...
+Things to download:
+ * Get the appropriate [http://developer.android.com/sdk/ndk/1.6_r1/index.html  NDK for your platform] this will be used for the pre-compiled versions of some of the native libraries required for building the NDK
+ * [http://android.git.kernel.org/pub/android-ndk-toolchain-20090323.tar.bz2 Android NDK Toolchain source code]
+ * And check out a version of the modified gcc 4.2.1 here. svn checkout http://android-gcc-objc2-0.googlecode.com/svn/trunk/ android-gcc-objc2-0-read-only
+
+= Preperation =
+
+After you have all three of these, you need to choose a target directory to install to that is appropriate for your platform. e.g. /usr/local/android or where ever seems appropriate. Create that directory and then add a new sub-directory named arm-eabi which will be used to house your processor specific binaries headers and libraries.
+
+= Patching =
+
+Extract the NDK binaries for your operating system (the first download).
+Copy the directories include and lib inside that root build/platforms/android-4/arch-arm/usr to your android root into the created arm-eabi folder ( I find it is helpful to create symbolic links back out to the android root for convenience if you are only targeting one processor ).
+
+Extract the NDK Toolchain source code (the second download).
+In the NDK Toolchain source folder, rename the Makefile.in to Makefile.in.bak (or whatever you can remember that is the original)
+Move the modified Makefile.in checked out from the svn to the NDK Toolchain source code.
+Repeat this with the gcc-4.2.1 folder.
+
+= Building =
+
+Configure and make the toolchain as normal making sure to use the --prefix= flag.
+Example
+./configure --prefix=/usr/local/android --target=arm-eabi --disable-werror
+make
+make install
+
+Now if the stars are aligned for you, which they must be for me, you will then have a toolchain capable of compiling objective c 2.0 code. (Remember to use -lobjc to bind to the objective c runtime library.
+
