@@ -151,6 +151,7 @@ target_libraries="target-libiberty \
 		target-boehm-gc \
 		${libgcj} \
 		target-libobjc \
+		target-libblocks \
 		target-libada \
 		target-libgomp"
 
