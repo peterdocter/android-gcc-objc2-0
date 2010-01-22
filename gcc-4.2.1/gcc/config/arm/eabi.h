@@ -21,16 +21,6 @@
 
 /* This file contains macro overrides for EABI targets.  */
 
-#undef TARGET_OS_CPP_BUILTINS
-#define TARGET_OS_CPP_BUILTINS()			\
-  do							\
-    {							\
-      TARGET_BPABI_CPP_BUILTINS ();			\
-      if (TARGET_ANDROID)				\
-	builtin_define ("__ANDROID__");			\
-    }							\
-  while (false)
-
 #undef SUBSUBTARGET_EXTRA_SPECS
 #define SUBSUBTARGET_EXTRA_SPECS \
   { "link_android",		ANDROID_LINK_SPEC },		\
