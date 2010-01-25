@@ -3736,6 +3736,16 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
 	  verbose_only_flag++;
 	  verbose_flag++;
 	}
+		/* APPLE LOCAL begin frameworks */
+      else if (strcmp (argv[i], "-framework") == 0)
+	  {
+		  if (i + 1 == argc)
+			  fatal ("argument to `-framework' is missing");
+		  
+		  n_infiles += 2;
+		  i++;
+	  }
+		/* APPLE LOCAL end frameworks */
       else if (argv[i][0] == '-' && argv[i][1] != 0)
 	{
 	  const char *p = &argv[i][1];
@@ -4136,6 +4146,15 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
 	;
       else if (strcmp (argv[i], "-###") == 0)
 	;
+		/* APPLE LOCAL begin frameworks */
+      else if (strcmp (argv[i], "-framework") == 0)
+	  {
+          infiles[n_infiles].language = "*";
+          infiles[n_infiles++].name = argv[i];
+          infiles[n_infiles].language = "*";
+          infiles[n_infiles++].name = argv[++i];
+	  }
+		/* APPLE LOCAL end frameworks */
       else if (argv[i][0] == '-' && argv[i][1] != 0)
 	{
 	  const char *p = &argv[i][1];

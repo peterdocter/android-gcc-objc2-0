@@ -541,7 +541,18 @@ handle_option (const char **argv, unsigned int lang_mask)
       complain_wrong_lang (argv[0], option, lang_mask);
       goto done;
     }
-
+	/* APPLE LOCAL begin iframework for 4.3 4094959 */
+  else if ((option->flags & CL_TARGET)
+		   && (option->flags & CL_LANG_ALL)
+		   && !(option->flags & lang_mask))
+  {
+      /* Complain for target flag language mismatches if any languages
+	   are specified.  */
+      complain_wrong_lang (argv[0], option, lang_mask);
+      goto done;
+  }
+	/* APPLE LOCAL end iframework for 4.3 4094959 */
+	
   if (arg == NULL && (option->flags & (CL_JOINED | CL_SEPARATE)))
     {
       if (!lang_hooks.missing_argument (opt, opt_index))
@@ -1337,6 +1348,12 @@ common_handle_option (size_t scode, const char *arg, int value,
     case OPT_funroll_loops:
       flag_unroll_loops_set = true;
       break;
+			
+			/* APPLE LOCAL begin fwritable strings  */
+		case OPT_fwritable_strings:
+			flag_writable_strings = value;
+			break;
+			/* APPLE LOCAL end fwritable strings  */
 
     case OPT_g:
       set_debug_level (NO_DEBUG, DEFAULT_GDB_EXTENSIONS, arg);

@@ -276,6 +276,13 @@ int flag_short_enums;
 
 int flag_pcc_struct_return = DEFAULT_PCC_STRUCT_RETURN;
 
+/* APPLE LOCAL begin fwritable strings  */
+/* Nonzero for -fwritable-strings:
+ store string constants in data segment and don't uniquize them.  */
+
+int flag_writable_strings = 0;
+/* APPLE LOCAL end fwritable strings  */
+
 /* 0 means straightforward implementation of complex divide acceptable.
    1 means wide ranges of inputs must work for complex divide.
    2 means C99-like requirements for complex multiply and divide.  */

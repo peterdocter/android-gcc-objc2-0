@@ -39,6 +39,8 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
 #include "opts.h"
 #include "options.h"
 #include "mkdeps.h"
+/* APPLE LOCAL iframework for 4.3 4094959 */
+#include "tm_p.h"
 
 #ifndef DOLLARS_IN_IDENTIFIERS
 # define DOLLARS_IN_IDENTIFIERS true
@@ -277,6 +279,16 @@ c_common_handle_option (size_t scode, const char *arg, int value)
     {
     default:
       if (cl_options[code].flags & (CL_C | CL_CXX | CL_ObjC | CL_ObjCXX))
+	  /* APPLE LOCAL begin iframework for 4.3 4094959 */
+	  {
+#ifdef TARGET_HANDLE_C_OPTION
+		  if ((option->flags & CL_TARGET))
+			  if (! TARGET_HANDLE_C_OPTION (scode, arg, value))
+				  result = 0;
+#endif
+		  break;
+	  }
+			/* APPLE LOCAL end iframework for 4.3 4094959 */
 	break;
 #ifdef CL_Fortran
       if (lang_fortran && (cl_options[code].flags & (CL_Fortran)))
@@ -314,9 +326,9 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       cpp_opts->print_include_names = 1;
       break;
 
-    case OPT_F:
-      TARGET_OPTF (xstrdup (arg));
-      break;
+		case OPT_F:
+			add_framework_path (xstrdup (arg));
+			break;
 
     case OPT_I:
       if (strcmp (arg, "-"))
