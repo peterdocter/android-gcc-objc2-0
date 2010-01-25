@@ -179,6 +179,13 @@ extern int flag_short_enums;
 
 extern int flag_pcc_struct_return;
 
+/* APPLE LOCAL begin fwritable strings  */
+/* Nonzero for -fwritable-strings:
+ store string constants in data segment and don't uniquize them.  */
+
+extern int flag_writable_strings;
+/* APPLE LOCAL end fwritable strings  */
+
 /* 0 means straightforward implementation of complex divide acceptable.
    1 means wide ranges of inputs must work for complex divide.
    2 means C99-like requirements for complex multiply and divide.  */
