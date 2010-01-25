@@ -8290,6 +8290,8 @@ is_base_type (tree type)
     case ENUMERAL_TYPE:
     case FUNCTION_TYPE:
     case METHOD_TYPE:
+		/* APPLE LOCAL radar 5732232 - blocks */
+	case BLOCK_POINTER_TYPE:
     case POINTER_TYPE:
     case REFERENCE_TYPE:
     case OFFSET_TYPE:
