@@ -12620,7 +12620,8 @@ gen_type_die_with_usage (tree type, dw_die_ref context_die,
     {
     case ERROR_MARK:
       break;
-
+		/* APPLE LOCAL radar 5732232 - blocks */
+	case BLOCK_POINTER_TYPE:
     case POINTER_TYPE:
     case REFERENCE_TYPE:
       /* We must set TREE_ASM_WRITTEN in case this is a recursive type.  This
