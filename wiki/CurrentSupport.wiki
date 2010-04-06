@@ -28,4 +28,5 @@ Fast enumeration (foreach/for-in):
 = Issues =
 Xcode Integration:
  * gcc is missing the flag -single_module
- * ld does not play nice with -filelist option
+ * ld does not play nice with -filelist option (temporarily fixed with perl script)
+ * linkage for dynamic libraries (elf so) binds to crt0 with references to _start using main (needs bionic patch)
