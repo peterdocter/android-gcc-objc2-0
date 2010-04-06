@@ -24,3 +24,8 @@ Blocks:
 
 Fast enumeration (foreach/for-in):
   * Not yet tested at all (also not sure if they compile yet)
+
+= Issues =
+Xcode Integration:
+ * gcc is missing the flag -single_module
+ * ld does not play nice with -filelist option
