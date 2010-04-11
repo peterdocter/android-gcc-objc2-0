@@ -1,0 +1,13 @@
+#summary The objc library that currently powers the runtime is still legacy to objc 1.0, there are missing features, however there is branch that is an effort to create a better runtime that bridges the gap between 1.0 and 2.0 style runtime access.
+
+= Introduction =
+
+libobjc bundled in the trunk is still (mostly) the legacy gnu objc. There are considerable implications for still retaining this old runtime, primarily of which some apps may utilize a more modern runtime bundled with objc 2.0. In order to correct the old runtime a branch has been made to maintain that portion of the project. It contains portions of the old libobjc and the new. 
+
+
+= Details =
+
+Things that need to be fixed/tested:
+  * Myriads of warnings need to be hunted down and resolved.
+  * Symbol back-tracing needs to be verified that the new version functions and closely mimics a more modern objc 2.0 library.
+  * Send message is still an old version, newer assembly versions need to be made for arm-eabi, mips, and the like.
