@@ -1790,6 +1790,8 @@ c_parser_declspecs (c_parser *parser, struct c_declspecs *specs,
 			case RID_INLINE:
 			case RID_AUTO:
 			case RID_THREAD:
+				/* APPLE LOCAL private extern (in 4.2 aa) */
+			case RID_PRIVATE_EXTERN:
 				if (!scspec_ok)
 					goto out;
 				attrs_ok = true;
@@ -3075,6 +3077,8 @@ c_parser_attributes (c_parser *parser)
 					case RID_LONG:
 					case RID_CONST:
 					case RID_EXTERN:
+						/* APPLE LOCAL private extern 5487726 */
+					case RID_PRIVATE_EXTERN:
 					case RID_REGISTER:
 					case RID_TYPEDEF:
 					case RID_SHORT:
@@ -3935,6 +3939,10 @@ c_parser_statement_after_labels (c_parser *parser)
 				c_parser_for_statement (parser);
 				break;
 			case RID_GOTO:
+				/* APPLE LOCAL begin radar 5732232 - blocks (C++ cb) */
+				if (cur_block)
+					error ("goto not allowed in block literal");
+				/* APPLE LOCAL end radar 5732232 - blocks (C++ cb) */
 				c_parser_consume_token (parser);
 				if (c_parser_next_token_is (parser, CPP_NAME))
 				{
@@ -4032,8 +4040,20 @@ c_parser_statement_after_labels (c_parser *parser)
      (recursively) all of the component statements should already have
      line numbers assigned.  ??? Can we discard no-op statements
      earlier?  */
+	/* APPLE LOCAL begin Radar 6144634  */
+	/* Normal expr stmts, including modify exprs, get the location where
+     the statement began, i.e. 'loc'.  Assignments of Blocks to Block
+     pointer variables get the location of the end of the Block definition,
+     i.e. 'input_location', which should already be set by this point.  */
 	if (stmt && EXPR_P (stmt))
-		SET_EXPR_LOCATION (stmt, loc);
+    {
+		if (TREE_CODE (stmt) == MODIFY_EXPR
+			&& TREE_CODE (TREE_TYPE (TREE_OPERAND (stmt, 0))) == BLOCK_POINTER_TYPE)
+			SET_EXPR_LOCATION (stmt, input_location);
+		else
+			SET_EXPR_LOCATION (stmt, loc);
+    }
+	/* APPLE LOCAL end Radar 6144634  */
 }
 
 /* Parse a parenthesized condition from an if, do or while statement.
@@ -6385,6 +6405,14 @@ c_parser_objc_class_instance_variables (c_parser *parser)
 			objc_set_visibility (1);
 			continue;
 		}
+		/* APPLE LOCAL begin radar 4564694 */
+		else if (c_parser_next_token_is_keyword (parser, RID_AT_PACKAGE))
+		{
+			c_parser_consume_token (parser);
+			objc_set_visibility (3);
+			continue;
+		}
+		/* APPLE LOCAL end radar 4564694 */
 		else if (c_parser_next_token_is (parser, CPP_PRAGMA))
 		{
 			c_parser_pragma (parser, pragma_external);
@@ -6981,6 +7009,26 @@ c_parser_objc_try_catch_statement (c_parser *parser)
 	objc_finish_try_stmt ();
 }
 
+/* APPLE LOCAL begin radar 5982990 */
+/* This routine is called from c_parser_objc_synchronized_statement
+ and is identical to c_parser_compound_statement with
+ the addition of volatizing local variables seen in the scope
+ of @synchroniz block.
+ */
+static tree
+c_parser_objc_synch_compound_statement (c_parser *parser)
+{
+	tree stmt;
+	if (!c_parser_require (parser, CPP_OPEN_BRACE, "expected %<{%>"))
+		return error_mark_node;
+	stmt = c_begin_compound_stmt (true);
+	c_parser_compound_statement_nostart (parser);
+	if (flag_objc_sjlj_exceptions)
+		objc_mark_locals_volatile (NULL);
+	return c_end_compound_stmt (stmt, true);
+}
+/* APPLE LOCAL end radar 5982990 */
+
 /* Parse an objc-synchronized-statement.
  
  objc-synchronized-statement:
@@ -7002,7 +7050,8 @@ c_parser_objc_synchronized_statement (c_parser *parser)
     }
 	else
 		expr = error_mark_node;
-	stmt = c_parser_compound_statement (parser);
+	/* APPLE LOCAL radar 5982990 */
+	stmt = c_parser_objc_synch_compound_statement (parser);
 	objc_build_synchronized (loc, expr, stmt);
 }
 
