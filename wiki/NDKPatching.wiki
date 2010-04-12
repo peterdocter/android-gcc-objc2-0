@@ -32,6 +32,8 @@ Move the modified Makefile.in checked out from the svn to the NDK Toolchain sour
 
 Repeat this with the gcc-4.2.1 folder.
 
+Repeat this with the binutils-2.17 folder.
+
 = Building =
 
 Configure and make the toolchain as normal making sure to use the --prefix= flag.
