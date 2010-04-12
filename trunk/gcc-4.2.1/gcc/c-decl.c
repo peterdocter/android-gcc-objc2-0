@@ -4499,6 +4499,8 @@ grokdeclarator (const struct c_declarator *declarator,
     }
 	else if (storage_class == csc_extern
 			 && initialized
+			 /* APPLE LOCAL private extern */
+			 && !declspecs->private_extern_p
 			 && !funcdef_flag)
     {
 		/* 'extern' with initialization is invalid if not at file scope.  */
@@ -5247,6 +5249,14 @@ grokdeclarator (const struct c_declarator *declarator,
 			if (declspecs->default_int_p)
 				C_FUNCTION_IMPLICIT_INT (decl) = 1;
 			
+			/* APPLE LOCAL begin private extern */
+			if (declspecs->private_extern_p)
+			{
+				DECL_VISIBILITY (decl) = VISIBILITY_HIDDEN;
+				DECL_VISIBILITY_SPECIFIED (decl) = 1;
+			}
+			/* APPLE LOCAL end private extern */
+			
 			/* Record presence of `inline', if it is reasonable.  */
 			if (flag_hosted && MAIN_NAME_P (declarator->u.id))
 			{
@@ -5314,6 +5324,14 @@ grokdeclarator (const struct c_declarator *declarator,
 			 a static declaration.  In that case, DECL_EXTERNAL will be
 			 reset later in start_decl.  */
 			DECL_EXTERNAL (decl) = (storage_class == csc_extern);
+			
+			/* APPLE LOCAL begin private extern */
+			if (declspecs->private_extern_p)
+			{
+				DECL_VISIBILITY (decl) = VISIBILITY_HIDDEN;
+				DECL_VISIBILITY_SPECIFIED (decl) = 1;
+			}
+			/* APPLE LOCAL end private extern */
 			
 			/* At file scope, the presence of a `static' or `register' storage
 			 class specifier, or the absence of all storage class specifiers
@@ -8178,6 +8196,8 @@ build_null_declspecs (void)
 	ret->tag_defined_p = false;
 	ret->explicit_signed_p = false;
 	ret->deprecated_p = false;
+	/* APPLE LOCAL "unavailable" attribute (radar 2809697) */
+	ret->unavailable_p = false;
 	ret->default_int_p = false;
 	ret->long_p = false;
 	ret->long_long_p = false;
@@ -8190,6 +8210,8 @@ build_null_declspecs (void)
 	ret->const_p = false;
 	ret->volatile_p = false;
 	ret->restrict_p = false;
+	/* APPLE LOCAL private extern */
+	ret->private_extern_p = false;
 	return ret;
 }
 
@@ -8653,6 +8675,7 @@ declspecs_add_scspec (struct c_declspecs *specs, tree scspec)
 			if (specs->thread_p)
 				error ("%<__thread%> before %<extern%>");
 			break;
+			/* APPLE LOCAL begin private extern */
 		case RID_PRIVATE_EXTERN:
 			specs->private_extern_p = true;
 			n = csc_extern;
