@@ -26,6 +26,8 @@
 #include "libiberty.h"
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "safe-ctype.h"
 #include "getopt.h"
 #include "bfdlink.h"
@@ -530,6 +532,7 @@ void
 parse_args (unsigned argc, char **argv)
 {
   unsigned i;
+  char path[PATH_MAX];
   int is, il, irl;
   int ingroup = 0;
   char *default_dirlist = NULL;
@@ -538,8 +541,8 @@ parse_args (unsigned argc, char **argv)
   struct option *really_longopts;
   int last_optind;
   enum report_method how_to_report_unresolved_symbols = RM_GENERATE_ERROR;
-  FILE *filelist;
-  
+  FILE *flistfile;
+  getcwd(path, PATH_MAX);
   shortopts = xmalloc (OPTION_COUNT * 3 + 2);
   longopts = xmalloc (sizeof (*longopts) * (OPTION_COUNT + 1));
   really_longopts = xmalloc (sizeof (*really_longopts) * (OPTION_COUNT + 1));
@@ -601,12 +604,13 @@ parse_args (unsigned argc, char **argv)
      To permit either usage, we look through the argument list.  If we
      find -G not followed by a number, we change it into --shared.
      This will work for most normal cases.  */
-  for (i = 1; i < argc; i++)
+	for (i = 1; i < argc; i++)
+	{
     if (strcmp (argv[i], "-G") == 0
 	&& (i + 1 >= argc
 	    || ! ISDIGIT (argv[i + 1][0])))
       argv[i] = (char *) "--shared";
-
+	}
   /* Because we permit long options to start with a single dash, and
      we have a --library option, and the -l option is conventionally
      used with an immediately following argument, we can have bad
@@ -636,6 +640,7 @@ parse_args (unsigned argc, char **argv)
   last_optind = -1;
   while (1)
     {
+		
       int longind;
       int optc;
 
@@ -665,7 +670,7 @@ parse_args (unsigned argc, char **argv)
 
       if (optc == -1)
 	break;
-
+	
       switch (optc)
 	{
 	case '?':
@@ -775,22 +780,33 @@ parse_args (unsigned argc, char **argv)
 	  lang_add_entry (optarg, TRUE);
 	  break;
 	case OPTION_FILELIST:
-		filelist = fopen(optarg, "r+");
-		while (!feof(filelist))
-		{
-			size_t len;
-			char *file;
-			char *ffile = fgetln(filelist, &len);
-			file = (char *)calloc(len + 1, 1);
-			strncpy(file, ffile, len);
-			if(strlen(file) > 0)
-			{
-				lang_add_input_file (file, lang_input_file_is_file_enum, NULL);
-			}
-			free(file);
-		}
-		fclose(filelist);
 		
+		flistfile = fopen (optarg, "r");
+		if (flistfile == NULL)
+			exit(-1);
+		while (!feof (flistfile))
+		{
+			int fd = 0;
+			char line[BUFSIZ];
+			char *fref = NULL;
+			bzero(line, BUFSIZ);
+			if (fgets (line, BUFSIZ, flistfile) == NULL && !line[0])
+				break;
+			fref = (char *)calloc(strlen(line) - 1, sizeof(char)); //BOO HISS THIS IS NOT FREE'd!
+			if(strncmp(path, line, strlen(path)) == 0)
+			{
+				fref[0] = '.';
+				strncpy(&fref[1], &line[strlen(path)], strlen(line) - 1);
+				fref[strlen(fref) - 1] = '\0';
+			}
+			else
+				strncpy(fref, line, strlen(line) - 1);
+			if((fd = open(fref, O_RDONLY, 0)) != -1)
+			{
+				lang_add_input_file (fref, lang_input_file_is_file_enum, NULL);
+				close(fd);
+			}
+		}
 		break;
 	case 'f':
 	  if (command_line.auxiliary_filters == NULL)
@@ -1375,11 +1391,15 @@ parse_args (unsigned argc, char **argv)
   if (ingroup)
     lang_leave_group ();
 
+	
+
   if (default_dirlist != NULL)
     {
       set_default_dirlist (default_dirlist);
       free (default_dirlist);
     }
+
+
 
   if (link_info.unresolved_syms_in_objects == RM_NOT_YET_SET)
     /* FIXME: Should we allow emulations a chance to set this ?  */
@@ -1388,6 +1408,7 @@ parse_args (unsigned argc, char **argv)
   if (link_info.unresolved_syms_in_shared_libs == RM_NOT_YET_SET)
     /* FIXME: Should we allow emulations a chance to set this ?  */
     link_info.unresolved_syms_in_shared_libs = how_to_report_unresolved_symbols;
+	
 }
 
 /* Add the (colon-separated) elements of DIRLIST_PTR to the
