@@ -330,6 +330,7 @@ main (int argc, char **argv)
   lang_init ();
   ldemul_before_parse ();
   lang_has_input_file = FALSE;
+  
   parse_args (argc, argv);
 
   if (config.hash_table_size != 0)
@@ -423,6 +424,7 @@ main (int argc, char **argv)
 
       info_msg ("\n==================================================\n");
     }
+	
 
   lang_final ();
 
@@ -465,6 +467,8 @@ main (int argc, char **argv)
   else
     output_bfd->flags |= EXEC_P;
 
+	
+
   ldwrite ();
 
   if (config.map_file != NULL)
@@ -474,6 +478,8 @@ main (int argc, char **argv)
   if (nocrossref_list != NULL)
     check_nocrossrefs ();
 
+
+	
   lang_finish ();
 
   /* Even if we're producing relocatable output, some non-fatal errors should
