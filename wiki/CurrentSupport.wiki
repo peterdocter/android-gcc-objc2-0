@@ -28,8 +28,9 @@ Fast enumeration (foreach/for-in):
 = Issues =
 Xcode Integration:
  * gcc is missing the flag -single_module
- * ld does not play nice with -filelist option (temporarily fixed with perl script)
- * linkage for dynamic libraries (elf so) binds to crt0 with references to _start using main (needs bionic patch)
+ * ~~ld does not play nice with -filelist option (temporarily fixed with perl script)~~ _no longer needed; ld now responds properly to filelist_
+ * linkage for dynamic libraries (elf so) binds to crt0 with references in `_start` using `main` (needs bionic patch)
+
 libobjc compatibility:
  * The current version of libobjc is still the old 1.0 GNU version.
  * There is a branch of the library that contains some newer code.
